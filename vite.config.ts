@@ -15,9 +15,7 @@ export default defineConfig({
     tsConfigPaths({
       projects: ["./tsconfig.json"],
     }),
-    tanstackStart({
-      vercel: process.env.VERCEL ? { region: "iad1" } : undefined,
-    }),
+    tanstackStart(),
     viteReact(),
   ],
 });
