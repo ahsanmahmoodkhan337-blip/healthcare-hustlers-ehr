@@ -1,0 +1,148 @@
+/**
+ * Global Styles — Healthcare Hustlers EHR Simulation
+ *
+ * Design Theme:
+ * - Slate grays (#f1f5f9, #cbd5e1, #64748b, #334155, #0f172a)
+ * - Medical blues (#1e40af primary, #0f766e secondary/teal accent)
+ * - White backgrounds with subtle shadows for cards
+ * - High contrast, ultra-clean clinical aesthetic
+ * - Comfortable reading widths for clinical data
+ *
+ * Inspiration: Blends the visual language of Epic (clean medical blues),
+ * eCW (compact data density), Athenahealth (open, airy layout), and
+ * DrChrono (mobile-friendly, accessible sizing).
+ */
+
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/*  Base Layer                                                        */
+/* ------------------------------------------------------------------ */
+@layer base {
+  html,
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased;
+    font-family:
+      "Inter",
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+  }
+
+  /* Selection color — medical blue */
+  ::selection {
+    @apply bg-blue-200 text-blue-900;
+  }
+
+  /* Focus ring — accessible and consistent */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-blue-500;
+  }
+
+  /* Scrollbar styling (Webkit) */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Utility / Component Layer — Custom clinical UI classes            */
+/* ------------------------------------------------------------------ */
+@layer components {
+  /* Data card — used for patient info, lab results, medication lists */
+  .clinical-card {
+    @apply rounded-lg border border-slate-200 bg-white p-4 shadow-sm;
+  }
+
+  /* Clinical data label */
+  .clinical-label {
+    @apply text-xs font-medium uppercase tracking-wider text-slate-500;
+  }
+
+  /* Clinical data value */
+  .clinical-value {
+    @apply text-sm font-medium text-slate-800;
+  }
+
+  /* Status badge */
+  .badge-normal {
+    @apply rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700;
+  }
+  .badge-abnormal {
+    @apply rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700;
+  }
+  .badge-critical {
+    @apply rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700;
+  }
+  .badge-pending {
+    @apply rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500;
+  }
+
+  /* Severity allergy badges */
+  .allergy-severe {
+    @apply inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800;
+  }
+  .allergy-moderate {
+    @apply inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800;
+  }
+  .allergy-mild {
+    @apply inline-block rounded bg-yellow-50 px-2 py-0.5 text-xs font-medium text-yellow-700;
+  }
+
+  /* Table styles for clinical data */
+  .clinical-table {
+    @apply w-full text-left text-sm;
+  }
+  .clinical-table th {
+    @apply border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500;
+  }
+  .clinical-table td {
+    @apply border-b border-slate-100 px-3 py-2 text-slate-700;
+  }
+  .clinical-table tr:hover td {
+    @apply bg-slate-50;
+  }
+
+  /* Dark navy header — Epic Hyperspace inspired top bar */
+  .header-nav {
+    @apply bg-slate-900 text-white;
+  }
+  .header-nav input::placeholder {
+    @apply text-slate-400;
+  }
+
+  /* AppShell 3-zone responsive grid */
+  .app-shell {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100dvh;
+  }
+  .app-shell-body {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    overflow: hidden;
+  }
+  @media (max-width: 1024px) {
+    .app-shell-body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Global search dropdown max height */
+  .search-dropdown {
+    max-height: min(60vh, 400px);
+    @apply overflow-y-auto;
+  }
+}

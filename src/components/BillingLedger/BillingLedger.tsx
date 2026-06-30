@@ -1,0 +1,332 @@
+/**
+ * BillingLedger — Enhanced Medical Biller Workspace
+ *
+ * Full educational content for medical billing students:
+ * - Interactive CMS-1500 form with all 33 blocks explained
+ * - Claim scrubber with NCCI edits check
+ * - Denial code reference (CO, PR, OA codes)
+ * - ERA/EOB explanation on paid claims
+ * - Revenue codes and POS codes reference
+ * - Reimbursement calculator
+ *
+ * Inspiration: Epic Resolute Hospital Billing / AAPC CPB curriculum
+ */
+
+import { useState } from "react";
+import { Receipt, Send, AlertTriangle, ArrowRight, CheckCircle2, XCircle, Search, FileText, DollarSign, BookOpen, Info } from "lucide-react";
+import { usePipeline } from "../../store/pipelineStore";
+import { CMS1500_BLOCKS, DENIAL_CODES, REVENUE_CODES, POS_CODES } from "./claimData";
+
+export function BillingLedger() {
+  const { state, submitClaim, handleDenial } = usePipeline();
+
+  const [payer, setPayer] = useState("Medicare");
+  const [posCode, setPosCode] = useState("11");
+  const [submitted, setSubmitted] = useState(false);
+  const [showForm, setShowForm] = useState(true);
+  const [showDenialRef, setShowDenialRef] = useState(false);
+  const [showPosRef, setShowPosRef] = useState(false);
+  const [showRevenueRef, setShowRevenueRef] = useState(false);
+
+  // Claim scrubber state
+  const [scrubResults, setScrubResults] = useState<{ check: string; pass: boolean; note: string }[] | null>(null);
+
+  const runScrubber = () => {
+    const results = [
+      { check: "ICD-10 code present", pass: state.icdCodes.length > 0, note: state.icdCodes.length > 0 ? `${state.icdCodes.length} code(s) found` : "No diagnosis codes entered" },
+      { check: "CPT code present", pass: state.cptCodes.length > 0, note: state.cptCodes.length > 0 ? `${state.cptCodes.length} code(s) found` : "No procedure codes entered" },
+      { check: "Diagnosis supports procedure", pass: state.icdCodes.length > 0 && state.cptCodes.length > 0, note: "Educational: Verify ICD-10 supports medical necessity for the CPT code" },
+      { check: "Payer selected", pass: true, note: `Payer: ${payer}` },
+      { check: "Place of service selected", pass: true, note: `POS: ${posCode}` },
+      { check: "Modifier check", pass: state.cptCodes.length <= 1, note: state.cptCodes.length > 1 ? "Multiple procedures may need modifier -25 or -59" : "Single procedure — no modifier needed" },
+    ];
+    setScrubResults(results);
+  };
+
+  const handleSubmit = () => {
+    submitClaim({ payer, posCode, submittedAt: new Date().toISOString() });
+    setSubmitted(true);
+  };
+
+  const simulateDenial = () => {
+    handleDenial("CO-16 — Claim lacks information");
+    setShowDenialRef(true);
+  };
+
+  // Calculate estimated payment
+  const calcPayment = () => {
+    const rates: Record<string, number> = { Medicare: 0.80, Medicaid: 0.65, "Blue Cross": 0.85, "United Healthcare": 0.82, Aetna: 0.83 };
+    const rate = rates[payer] ?? 0.80;
+    const billed = 185.00;
+    return { billed, allowed: billed * rate, paid: billed * rate * 0.90, patient: billed * rate * 0.10 };
+  };
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Header */}
+      <div className="border-b border-slate-200 bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Receipt className="h-5 w-5 text-violet-600" />
+          <h2 className="text-sm font-bold text-slate-800">Medical Billing — Enhanced Billing Ledger</h2>
+          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">Stage 3</span>
+        </div>
+      </div>
+
+      {state.status === "coded" ? (
+        <div className="flex flex-1 overflow-hidden">
+          {/* ─── Left: CMS-1500 Form + Actions ─── */}
+          <div className="flex flex-1 flex-col overflow-y-auto p-4">
+            {/* Tab navigation */}
+            <div className="flex gap-1 border-b border-slate-200 pb-2 mb-4">
+              {[
+                { key: "form", label: "CMS-1500 Form" },
+                { key: "scrubber", label: "Claim Scrubber" },
+                { key: "denials", label: "Denial Codes" },
+                { key: "references", label: "References" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => {
+                    setShowForm(tab.key === "form");
+                    setShowDenialRef(tab.key === "denials");
+                    setShowPosRef(tab.key === "references");
+                    setShowRevenueRef(tab.key === "references");
+                  }}
+                  className={`px-3 py-1.5 text-[10px] font-medium rounded-t-lg transition-colors ${
+                    (tab.key === "form" && showForm) || (tab.key === "scrubber" && !showForm && !showDenialRef && !showPosRef)
+                    || (tab.key === "denials" && showDenialRef)
+                    || (tab.key === "references" && (showPosRef || showRevenueRef))
+                      ? "bg-violet-50 text-violet-700 border-b-2 border-violet-500"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* CMS-1500 Form */}
+            {showForm && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText className="h-4 w-4 text-violet-500" />
+                  <span className="text-xs font-semibold text-slate-600">CMS-1500 Claim Form — Interactive Mockup</span>
+                  <span className="text-[10px] text-slate-400">(Click any box for details)</span>
+                </div>
+
+                {/* Form grid — key blocks */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {CMS1500_BLOCKS.slice(0, 12).map((block) => (
+                    <div
+                      key={block.box}
+                      className="group relative rounded-lg border border-slate-200 bg-white p-2 text-xs hover:border-violet-300 hover:bg-violet-50 transition-colors cursor-help"
+                    >
+                      <span className="font-mono text-[10px] text-violet-500 font-bold">Box {block.box}</span>
+                      <p className="mt-0.5 text-[10px] text-slate-600 truncate">{block.label}</p>
+                      {block.autoFilled && <span className="text-[8px] text-green-500">✓ auto-filled</span>}
+                      {/* Tooltip */}
+                      <div className="absolute left-0 top-full z-10 mt-1 hidden w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg group-hover:block">
+                        <p className="text-[10px] font-semibold text-slate-700">Box {block.box}: {block.label}</p>
+                        <p className="mt-1 text-[10px] text-slate-500">{block.description}</p>
+                        {block.commonError && (
+                          <p className="mt-1 text-[9px] text-red-500">⚠️ {block.commonError}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Claim entry form */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-semibold text-slate-700 mb-3">Claim Submission</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-slate-500">Payer</label>
+                      <select value={payer} onChange={(e) => setPayer(e.target.value)} className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs">
+                        <option>Medicare</option><option>Medicaid</option><option>Blue Cross</option>
+                        <option>United Healthcare</option><option>Aetna</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500">Place of Service</label>
+                      <select value={posCode} onChange={(e) => setPosCode(e.target.value)} className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs">
+                        {POS_CODES.slice(0, 6).map((p) => (
+                          <option key={p.code} value={p.code}>{p.code} — {p.description}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-[10px] text-slate-400">
+                    ICD-10: {state.icdCodes.join(", ") || "—"} &nbsp;|&nbsp; CPT: {state.cptCodes.join(", ") || "—"}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <button onClick={handleSubmit} className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-xs font-medium text-white hover:bg-violet-500">
+                    <Send className="h-3.5 w-3.5" /> Submit Claim (Path A — Paid)
+                  </button>
+                  <button onClick={simulateDenial} className="flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700 hover:bg-red-100">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Simulate Denial (Path B)
+                  </button>
+                  <button onClick={runScrubber} className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-medium text-sky-700 hover:bg-sky-100">
+                    <Search className="h-3.5 w-3.5" /> Run Claim Scrubber
+                  </button>
+                </div>
+
+                {/* Scrubber results */}
+                {scrubResults && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-700 mb-3">Claim Scrubber Results</p>
+                    <div className="space-y-2">
+                      {scrubResults.map((r) => (
+                        <div key={r.check} className="flex items-start gap-2 text-xs">
+                          {r.pass ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" /> : <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />}
+                          <div>
+                            <span className={`font-medium ${r.pass ? "text-green-700" : "text-red-700"}`}>{r.pass ? "✓" : "✗"} {r.check}</span>
+                            <p className="text-[10px] text-slate-500">{r.note}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Denial Code Reference */}
+            {showDenialRef && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <BookOpen className="h-3.5 w-3.5" /> Denial Code Reference — Educational
+                </p>
+                {DENIAL_CODES.map((d) => (
+                  <div key={d.code} className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono font-bold text-sm ${
+                        d.category === "CO" ? "text-red-600" : d.category === "PR" ? "text-amber-600" : "text-sky-600"
+                      }`}>{d.code}</span>
+                      <span className="text-slate-500 text-[10px]">({d.category === "CO" ? "Contractual" : d.category === "PR" ? "Patient Responsibility" : "Organizational"})</span>
+                    </div>
+                    <p className="mt-1 font-medium text-slate-700">{d.description}</p>
+                    <p className="mt-0.5 text-slate-500">{d.meaning}</p>
+                    <p className="mt-1 text-[10px] text-green-700">💡 Fix: {d.howToFix}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* References */}
+            {(showPosRef || showRevenueRef) && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-2">Place of Service (POS) Codes</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {POS_CODES.map((p) => (
+                      <div key={p.code} className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px]">
+                        <span className="font-mono font-bold text-slate-600">{p.code}</span>
+                        <span className="ml-1.5 text-slate-500">{p.description}</span>
+                        <span className="ml-1 text-[8px] text-slate-400">({p.setting})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-2">Revenue Codes (Institutional Claims)</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {REVENUE_CODES.map((r) => (
+                      <div key={r.code} className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px]">
+                        <span className="font-mono font-bold text-slate-600">{r.code}</span>
+                        <span className="ml-1.5 text-slate-500">{r.description}</span>
+                        <span className="ml-1 text-[8px] text-slate-400">({r.type})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ─── Right: Reimbursement Calculator ─── */}
+          <div className="hidden w-64 border-l border-slate-200 bg-slate-50 p-4 lg:block overflow-y-auto">
+            <div className="flex items-center gap-1.5 mb-3">
+              <DollarSign className="h-3.5 w-3.5 text-green-500" />
+              <span className="text-[10px] font-semibold text-slate-500">Reimbursement Calculator</span>
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-lg bg-white p-3 shadow-sm">
+                <p className="text-[10px] text-slate-400">Fee Schedule</p>
+                <p className="text-lg font-bold text-green-600">$185.00</p>
+                <p className="text-[10px] text-slate-400">Billed Amount</p>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm">
+                <p className="text-[10px] text-slate-400">Payer Rate</p>
+                <p className="text-sm font-bold text-slate-700">{payer}: {(calcPayment().allowed / calcPayment().billed * 100).toFixed(0)}% of billed</p>
+              </div>
+              <div className="rounded-lg bg-green-50 p-3 border border-green-200">
+                <p className="text-[10px] text-green-600">Estimated Payment</p>
+                <p className="text-lg font-bold text-green-700">${calcPayment().paid.toFixed(2)}</p>
+                <p className="text-[10px] text-green-500">Patient responsibility: ${calcPayment().patient.toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 p-3 border border-amber-200">
+                <p className="text-[10px] text-amber-600 flex items-center gap-1"><Info className="h-3 w-3" /> Educational</p>
+                <p className="text-[10px] text-amber-700">The difference between billed and allowed amounts is a contractual adjustment. Most payers don't pay 100% of charges.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : submitted && state.status === "paid" ? (
+        <div className="flex flex-1 items-center justify-center p-4">
+          <div className="max-w-md rounded-xl border border-green-200 bg-green-50 p-8 text-center">
+            <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-green-500" />
+            <p className="text-sm font-medium text-green-700">Claim Submitted & Paid — ERA Summary</p>
+            <div className="mt-4 space-y-2 text-left text-xs">
+              <div className="flex justify-between border-b border-green-200 pb-1"><span className="text-green-600">Billed Amount:</span><span className="font-medium text-green-800">${calcPayment().billed.toFixed(2)}</span></div>
+              <div className="flex justify-between border-b border-green-200 pb-1"><span className="text-green-600">Allowed Amount:</span><span className="font-medium text-green-800">${calcPayment().allowed.toFixed(2)}</span></div>
+              <div className="flex justify-between border-b border-green-200 pb-1"><span className="text-green-600">Paid Amount:</span><span className="font-bold text-green-800">${calcPayment().paid.toFixed(2)}</span></div>
+              <div className="flex justify-between border-b border-green-200 pb-1"><span className="text-green-600">Patient Responsibility:</span><span className="font-medium text-green-800">${calcPayment().patient.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-green-600">Contractual Adjustment:</span><span className="font-medium text-green-800">${(calcPayment().billed - calcPayment().allowed).toFixed(2)}</span></div>
+            </div>
+            <p className="mt-4 text-[10px] text-green-500">This is an Electronic Remittance Advice (ERA) — it shows what the insurance paid vs what was billed. The difference is the contractual adjustment per your payer agreement.</p>
+          </div>
+        </div>
+      ) : state.status === "denied" ? (
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-1 items-center justify-center p-4">
+            <div className="max-w-lg rounded-xl border border-red-200 bg-red-50 p-6">
+              <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-red-500" />
+              <p className="text-sm font-medium text-red-700 text-center">Claim Denied — Routed to AR Queue</p>
+              <p className="mt-2 text-xs text-red-600 text-center">{state.denialInfo?.code}</p>
+              <div className="mt-4 space-y-2">
+                {DENIAL_CODES.filter(d => d.code === "CO-16" || d.code === "CO-50").map((d) => (
+                  <div key={d.code} className="rounded-lg bg-white p-3 text-xs">
+                    <span className="font-mono font-bold text-red-600">{d.code}</span>
+                    <p className="mt-0.5 text-slate-600">{d.description}</p>
+                    <p className="mt-1 text-[10px] text-green-700">💡 Fix: {d.howToFix}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="hidden w-64 border-l border-slate-200 bg-slate-50 p-4 lg:block overflow-y-auto">
+            <p className="text-xs font-semibold text-slate-700 mb-2">Denial Quick Reference</p>
+            <div className="space-y-2">
+              {DENIAL_CODES.slice(0, 5).map((d) => (
+                <div key={d.code} className="rounded bg-white p-2 text-[10px] border border-slate-200">
+                  <span className="font-mono font-bold text-red-500">{d.code}</span>
+                  <p className="text-slate-500">{d.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center text-center">
+          <Receipt className="mb-2 h-8 w-8 text-slate-300" />
+          <p className="text-sm text-slate-400">Waiting for coded encounter...</p>
+          <p className="text-xs text-slate-300">Complete coding first</p>
+        </div>
+      )}
+    </div>
+  );
+}

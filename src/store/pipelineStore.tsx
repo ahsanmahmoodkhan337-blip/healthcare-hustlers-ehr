@@ -1,0 +1,254 @@
+/**
+ * Pipeline Store — RCM Pipeline State (React Context)
+ *
+ * Tracks the full RCM pipeline for each patient encounter through 5 stages:
+ *   [Charted] → [Coded] → [Billed] → [Prior Auth] → [Paid/Denied/Reprocessed]
+ *
+ * Roles: Scribe, Coder, Biller, Prior Auth, AR Voice Specialist
+ *
+ * Submission functions auto-advance stages. The AR Voice Specialist
+ * role handles denied claims with aging buckets and call resolution.
+ */
+
+import { createContext, useContext, useState, type ReactNode } from "react";
+
+// ─── Types ────────────────────────────────────────────────────────
+
+export type Role = "scribe" | "coder" | "biller" | "prior-auth" | "ar-voice";
+
+export interface PipelineState {
+  patientId: string | null;
+  stage: Role | "complete";
+  status: "charted" | "coded" | "billed" | "paid" | "denied" | "reprocessed" | "pending";
+  scribeNote: string;
+  icdCodes: string[];
+  cptCodes: string[];
+  claimData: Record<string, string>;
+  denialInfo: { code: string; reason: string; amount: number } | null;
+  paData: Record<string, string>;
+}
+
+export interface DeniedClaim {
+  id: string;
+  encounterId: string;
+  patientName: string;
+  reason: string;
+  amount: number;
+  deniedAt: string;
+  agingBucket: "0-30" | "31-60" | "61-90" | "90+";
+  resolutionStatus: "unresolved" | "in-progress" | "resolved" | "escalated";
+  assignedTo?: string;
+  notes?: string;
+}
+
+export interface ARCallRecord {
+  id: string;
+  claimId: string;
+  patientName: string;
+  caller: string;
+  timestamp: string;
+  duration: number;
+  outcome: "reached-patient" | "left-voicemail" | "wrong-number" | "promised-payment" | "escalated";
+  notes?: string;
+}
+
+// ─── Context ───────────────────────────────────────────────────────
+
+interface PipelineContextValue {
+  state: PipelineState;
+  currentRole: Role;
+  setRole: (role: Role) => void;
+  submitToCoding: (note: string) => void;
+  submitToBilling: (icdCodes: string[], cptCodes: string[]) => void;
+  submitClaim: (claimData: Record<string, string>) => void;
+  handleDenial: (denialCode: string) => void;
+  submitPA: (paData: Record<string, string>) => void;
+  getRoleLabel: (role: Role) => string;
+  // AR-specific
+  deniedClaims: DeniedClaim[];
+  arCalls: ARCallRecord[];
+  resolveDenial: (claimId: string, status: DeniedClaim["resolutionStatus"]) => void;
+  addCallRecord: (record: ARCallRecord) => void;
+  assignDenial: (claimId: string, agent: string) => void;
+  getClaimsByAging: () => Record<string, DeniedClaim[]>;
+}
+
+const PipelineContext = createContext<PipelineContextValue | null>(null);
+
+// ─── Helpers ───────────────────────────────────────────────────────
+
+function determineAgingBucket(deniedAt: string): DeniedClaim["agingBucket"] {
+  const daysSince = Math.floor(
+    (Date.now() - new Date(deniedAt).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (daysSince <= 30) return "0-30";
+  if (daysSince <= 60) return "31-60";
+  if (daysSince <= 90) return "61-90";
+  return "90+";
+}
+
+const ROLE_LABELS: Record<Role, string> = {
+  scribe: "Scribe / Provider",
+  coder: "Medical Coder",
+  biller: "Medical Biller",
+  "prior-auth": "Prior Authorization",
+  "ar-voice": "AR Voice Specialist",
+};
+
+const STAGE_ORDER: Role[] = ["scribe", "coder", "biller", "prior-auth"];
+
+// ─── Provider ──────────────────────────────────────────────────────
+
+export function PipelineProvider({ children }: { children: ReactNode }) {
+  const [pipeline, setPipeline] = useState<PipelineState>({
+    patientId: null,
+    stage: "scribe",
+    status: "pending",
+    scribeNote: "",
+    icdCodes: [],
+    cptCodes: [],
+    claimData: {},
+    denialInfo: null,
+    paData: {},
+  });
+
+  const [currentRole, setCurrentRole] = useState<Role>("scribe");
+  const [deniedClaims, setDeniedClaims] = useState<DeniedClaim[]>([]);
+  const [arCalls, setArCalls] = useState<ARCallRecord[]>([]);
+
+  const setRole = (role: Role) => {
+    setCurrentRole(role);
+  };
+
+  // Auto-advance: Scribe → Coder
+  const submitToCoding = (note: string) => {
+    setPipeline((prev) => ({
+      ...prev,
+      scribeNote: note,
+      stage: "coder",
+      status: "charted",
+    }));
+  };
+
+  // Auto-advance: Coder → Biller
+  const submitToBilling = (icdCodes: string[], cptCodes: string[]) => {
+    setPipeline((prev) => ({
+      ...prev,
+      icdCodes,
+      cptCodes,
+      stage: "biller",
+      status: "coded",
+    }));
+  };
+
+  // Auto-advance: Biller → Prior Auth (or Paid/Denied)
+  const submitClaim = (claimData: Record<string, string>) => {
+    setPipeline((prev) => ({
+      ...prev,
+      claimData,
+      stage: "prior-auth",
+      status: "billed",
+    }));
+  };
+
+  // Denial from Biller stage — routes to AR queue
+  const handleDenial = (denialCode: string) => {
+    setPipeline((prev) => {
+      const denial: DeniedClaim = {
+        id: `denial-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        encounterId: prev.patientId ?? "unknown",
+        patientName: "",
+        reason: denialCode,
+        amount: 0,
+        deniedAt: new Date().toISOString(),
+        agingBucket: "0-30",
+        resolutionStatus: "unresolved",
+      };
+      setDeniedClaims((d) => [...d, denial]);
+      return {
+        ...prev,
+        status: "denied",
+        denialInfo: { code: denialCode, reason: "Claim denied", amount: 0 },
+      };
+    });
+  };
+
+  // Auto-advance: Prior Auth → complete (paid) or stays at prior-auth
+  const submitPA = (paData: Record<string, string>) => {
+    setPipeline((prev) => ({
+      ...prev,
+      paData,
+      status: "paid",
+      denialInfo: null,
+    }));
+  };
+
+  // AR functions
+  const resolveDenial = (claimId: string, status: DeniedClaim["resolutionStatus"]) => {
+    setDeniedClaims((prev) =>
+      prev.map((c) =>
+        c.id === claimId
+          ? { ...c, resolutionStatus: status, agingBucket: determineAgingBucket(c.deniedAt) }
+          : c
+      )
+    );
+  };
+
+  const addCallRecord = (record: ARCallRecord) => {
+    setArCalls((prev) => [...prev, record]);
+  };
+
+  const assignDenial = (claimId: string, agent: string) => {
+    setDeniedClaims((prev) =>
+      prev.map((c) => (c.id === claimId ? { ...c, assignedTo: agent } : c))
+    );
+  };
+
+  const getClaimsByAging = () => {
+    const buckets: Record<string, DeniedClaim[]> = {
+      "0-30": [],
+      "31-60": [],
+      "61-90": [],
+      "90+": [],
+    };
+    deniedClaims.forEach((c) => {
+      const bucket = determineAgingBucket(c.deniedAt);
+      buckets[bucket].push(c);
+    });
+    return buckets;
+  };
+
+  const getRoleLabel = (role: Role) => ROLE_LABELS[role] ?? role;
+
+  return (
+    <PipelineContext.Provider
+      value={{
+        state: pipeline,
+        currentRole,
+        setRole,
+        submitToCoding,
+        submitToBilling,
+        submitClaim,
+        handleDenial,
+        submitPA,
+        getRoleLabel,
+        deniedClaims,
+        arCalls,
+        resolveDenial,
+        addCallRecord,
+        assignDenial,
+        getClaimsByAging,
+      }}
+    >
+      {children}
+    </PipelineContext.Provider>
+  );
+}
+
+// ─── Hook ──────────────────────────────────────────────────────────
+
+export function usePipeline(): PipelineContextValue {
+  const ctx = useContext(PipelineContext);
+  if (!ctx) throw new Error("usePipeline must be used within a PipelineProvider");
+  return ctx;
+}
