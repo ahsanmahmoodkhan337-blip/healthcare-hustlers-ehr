@@ -18,7 +18,7 @@ import { usePipeline } from "../../store/pipelineStore";
 import { CMS1500_BLOCKS, DENIAL_CODES, REVENUE_CODES, POS_CODES } from "./claimData";
 
 export function BillingLedger() {
-  const { state, submitClaim, handleDenial } = usePipeline();
+  const { state, submitClaim, handleDenial, setRole } = usePipeline();
 
   const [payer, setPayer] = useState("Medicare");
   const [posCode, setPosCode] = useState("11");
@@ -27,6 +27,7 @@ export function BillingLedger() {
   const [showDenialRef, setShowDenialRef] = useState(false);
   const [showPosRef, setShowPosRef] = useState(false);
   const [showRevenueRef, setShowRevenueRef] = useState(false);
+  const [needsPriorAuth, setNeedsPriorAuth] = useState(false);
 
   // Claim scrubber state
   const [scrubResults, setScrubResults] = useState<{ check: string; pass: boolean; note: string }[] | null>(null);
@@ -72,7 +73,28 @@ export function BillingLedger() {
         </div>
       </div>
 
-      {state.status === "coded" ? (
+      {submitted ? (
+        <div className="flex flex-1 items-center justify-center p-4">
+          <div className="max-w-md rounded-xl border border-purple-200 bg-purple-50 p-8 text-center">
+            <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-green-500" />
+            <p className="text-sm font-medium text-purple-700">Claim Submitted Successfully!</p>
+            <p className="mt-2 text-xs text-purple-600">
+              The claim has been submitted to the payer.
+              {state.icdCodes?.some(c => c.startsWith('Z') || c.startsWith('S') || c.startsWith('M'))
+                ? ' This encounter may require Prior Authorization. Please proceed to the Prior Auth stage to verify.'
+                : ' No prior authorization is needed for this encounter. The claim has been processed.'}
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button onClick={() => setSubmitted(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                Back to Billing
+              </button>
+              <button onClick={() => setRole("prior-auth")} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500">
+                Proceed to Prior Auth
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : state.status === "coded" || state.status === "billed" ? (
         <div className="flex flex-1 overflow-hidden">
           {/* ─── Left: CMS-1500 Form + Actions ─── */}
           <div className="flex flex-1 flex-col overflow-y-auto p-4">
@@ -158,6 +180,10 @@ export function BillingLedger() {
                   </div>
                   <div className="mt-3 text-[10px] text-slate-400">
                     ICD-10: {state.icdCodes.join(", ") || "—"} &nbsp;|&nbsp; CPT: {state.cptCodes.join(", ") || "—"}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input type="checkbox" id="needsPA" checked={needsPriorAuth} onChange={e => setNeedsPriorAuth(e.target.checked)} className="accent-violet-500" />
+                    <label htmlFor="needsPA" className="text-[10px] text-slate-600">This encounter requires <strong>Prior Authorization</strong></label>
                   </div>
                 </div>
 
@@ -275,7 +301,7 @@ export function BillingLedger() {
             </div>
           </div>
         </div>
-      ) : submitted && state.status === "paid" ? (
+      ) : state.status === "paid" ? (
         <div className="flex flex-1 items-center justify-center p-4">
           <div className="max-w-md rounded-xl border border-green-200 bg-green-50 p-8 text-center">
             <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-green-500" />

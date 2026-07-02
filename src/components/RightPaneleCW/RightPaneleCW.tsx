@@ -9,14 +9,40 @@
  * for quick clinical decision support.
  */
 
-import { Activity, AlertTriangle, Pill, Stethoscope } from "lucide-react";
+import { Activity, AlertTriangle, Pill, Stethoscope, Gauge, Thermometer, Heart, Wind, Droplets, FileText } from "lucide-react";
 import type { Patient } from "../../store/patientStore";
 
 interface RightPaneleCWProps {
   patient: Patient | null;
+  editableVitals?: {
+    bloodPressure: string;
+    heartRate: string;
+    temperature: string;
+    respiratoryRate: string;
+    oxygenSaturation: string;
+  };
+  editablePatientData?: {
+    chiefComplaint: string;
+    problems: string[];
+    medications: { id: string; name: string; dosage: string; frequency: string }[];
+    allergies: string[];
+    pcp: string;
+    insurance: string;
+  };
+  sharedImmunizations?: string[];
+  sharedLabs?: string[];
+  sharedReferrals?: string[];
+  sharedOrders?: string[];
+  sharedImaging?: string[];
+  soapNote?: {
+    subjective: string;
+    objective: string;
+    assessment: string;
+    plan: string;
+  };
 }
 
-export function RightPaneleCW({ patient }: RightPaneleCWProps) {
+export function RightPaneleCW({ patient, editableVitals, editablePatientData, sharedImmunizations, sharedLabs, sharedReferrals, sharedOrders, sharedImaging, soapNote }: RightPaneleCWProps) {
   if (!patient) {
     return (
       <aside className="w-72 shrink-0 border-l border-slate-200 bg-slate-50 p-4">
@@ -50,7 +76,7 @@ export function RightPaneleCW({ patient }: RightPaneleCWProps) {
           Chief Complaint
         </p>
         <p className="text-sm font-medium text-amber-900">
-          {patient.chiefComplaint}
+          {editablePatientData?.chiefComplaint || patient.chiefComplaint}
         </p>
       </div>
 
@@ -61,27 +87,28 @@ export function RightPaneleCW({ patient }: RightPaneleCWProps) {
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             Latest Vitals
           </span>
+          {editableVitals && <span className="text-[9px] text-blue-500 italic">(live)</span>}
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
           <span className="text-slate-500">BP:</span>
           <span className="font-medium text-slate-800">
-            {patient.vitals.bloodPressure}
+            {editableVitals?.bloodPressure ?? patient.vitals.bloodPressure}
           </span>
           <span className="text-slate-500">HR:</span>
           <span className="font-medium text-slate-800">
-            {patient.vitals.heartRate} bpm
+            {editableVitals?.heartRate ?? patient.vitals.heartRate} bpm
           </span>
           <span className="text-slate-500">Temp:</span>
           <span className="font-medium text-slate-800">
-            {patient.vitals.temperature}°F
+            {editableVitals?.temperature ?? patient.vitals.temperature}°F
           </span>
           <span className="text-slate-500">RR:</span>
           <span className="font-medium text-slate-800">
-            {patient.vitals.respiratoryRate}
+            {editableVitals?.respiratoryRate ?? patient.vitals.respiratoryRate}
           </span>
           <span className="text-slate-500">SpO2:</span>
           <span className="font-medium text-slate-800">
-            {patient.vitals.oxygenSaturation}%
+            {editableVitals?.oxygenSaturation ?? patient.vitals.oxygenSaturation}%
           </span>
         </div>
       </div>
@@ -95,7 +122,7 @@ export function RightPaneleCW({ patient }: RightPaneleCWProps) {
           </span>
         </div>
         <ul className="space-y-1">
-          {patient.problems.map((problem, i) => (
+          {(editablePatientData?.problems || patient.problems).map((problem, i) => (
             <li
               key={i}
               className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-800"
@@ -111,14 +138,11 @@ export function RightPaneleCW({ patient }: RightPaneleCWProps) {
         <div className="mb-2 flex items-center gap-1.5">
           <Pill className="h-4 w-4 text-blue-600" />
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Active Medications ({patient.medications.filter((m) => m.status === "active").length})
+            Active Medications ({(editablePatientData?.medications || patient.meditations)?.length || patient.medications.filter((m) => m.status === "active").length})
           </span>
         </div>
         <ul className="space-y-1">
-          {patient.medications
-            .filter((m) => m.status === "active")
-            .slice(0, 5)
-            .map((med) => (
+          {(editablePatientData?.medications || patient.medications.filter((m) => m.status === "active")).slice(0, 5).map((med) => (
               <li
                 key={med.id}
                 className="flex items-start gap-1 text-xs text-slate-700"
@@ -140,19 +164,19 @@ export function RightPaneleCW({ patient }: RightPaneleCWProps) {
             Allergies
           </span>
         </div>
-        {patient.allergies.length > 0 ? (
+        {editablePatientData?.allergies?.length ? (
+          <div className="flex flex-wrap gap-1">
+            {editablePatientData.allergies.map((a, i) => (
+              <span key={i} className="rounded bg-red-50 px-2 py-0.5 text-xs text-red-700">
+                {typeof a === "string" ? a : a.allergen || JSON.stringify(a)}
+              </span>
+            ))}
+          </div>
+        ) : patient.allergies.length > 0 ? (
           <ul className="space-y-1">
             {patient.allergies.map((alg) => (
               <li key={alg.id}>
-                <span
-                  className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
-                    alg.severity === "severe"
-                      ? "bg-red-100 text-red-800"
-                      : alg.severity === "moderate"
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-yellow-50 text-yellow-700"
-                  }`}
-                >
+                <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
                   {alg.allergen} ({alg.severity})
                 </span>
               </li>
@@ -163,15 +187,63 @@ export function RightPaneleCW({ patient }: RightPaneleCWProps) {
         )}
       </div>
 
+      {/* SOAP Note (from scribe workflow) */}
+      {soapNote && (soapNote.subjective || soapNote.objective || soapNote.assessment || soapNote.plan) && (
+        <div className="border-b border-slate-200 p-3">
+          <div className="mb-1 flex items-center gap-1.5">
+            <FileText className="h-3.5 w-3.5 text-slate-500" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">SOAP Note</span>
+          </div>
+          <div className="space-y-1 text-[10px]">
+            {soapNote.subjective && <p><span className="font-semibold text-blue-600">S:</span> {soapNote.subjective.slice(0, 100)}{soapNote.subjective.length > 100 ? "..." : ""}</p>}
+            {soapNote.objective && <p><span className="font-semibold text-green-600">O:</span> {soapNote.objective.slice(0, 100)}{soapNote.objective.length > 100 ? "..." : ""}</p>}
+            {soapNote.assessment && <p><span className="font-semibold text-amber-600">A:</span> {soapNote.assessment.slice(0, 100)}{soapNote.assessment.length > 100 ? "..." : ""}</p>}
+            {soapNote.plan && <p><span className="font-semibold text-purple-600">P:</span> {soapNote.plan.slice(0, 100)}{soapNote.plan.length > 100 ? "..." : ""}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Shared Data: Immunizations, Labs, Referrals, Orders, Imaging */}
+      {sharedImmunizations && sharedImmunizations.length > 0 && (
+        <div className="border-b border-slate-200 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-green-600 mb-1">Immunizations</p>
+          <div className="flex flex-wrap gap-1">{sharedImmunizations.map((item, i) => <span key={i} className="rounded bg-green-50 px-1.5 py-0.5 text-[10px] text-green-700">{item}</span>)}</div>
+        </div>
+      )}
+      {sharedLabs && sharedLabs.length > 0 && (
+        <div className="border-b border-slate-200 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 mb-1">Labs</p>
+          <div className="space-y-0.5">{sharedLabs.map((item, i) => <p key={i} className="text-[10px] text-slate-600">{item}</p>)}</div>
+        </div>
+      )}
+      {sharedReferrals && sharedReferrals.length > 0 && (
+        <div className="border-b border-slate-200 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-purple-600 mb-1">Referrals</p>
+          <div className="flex flex-wrap gap-1">{sharedReferrals.map((item, i) => <span key={i} className="rounded bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-700">{item}</span>)}</div>
+        </div>
+      )}
+      {sharedOrders && sharedOrders.length > 0 && (
+        <div className="border-b border-slate-200 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 mb-1">Orders</p>
+          <div className="space-y-0.5">{sharedOrders.map((item, i) => <p key={i} className="text-[10px] text-slate-600">{item}</p>)}</div>
+        </div>
+      )}
+      {sharedImaging && sharedImaging.length > 0 && (
+        <div className="border-b border-slate-200 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600 mb-1">Imaging</p>
+          <div className="flex flex-wrap gap-1">{sharedImaging.map((item, i) => <span key={i} className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700">{item}</span>)}</div>
+        </div>
+      )}
+
       {/* Insurance & PCP Footer */}
       <div className="border-t border-slate-200 bg-white p-3 text-xs text-slate-500">
         <p>
           <span className="font-medium text-slate-600">PCP:</span>{" "}
-          {patient.primaryCareProvider}
+          {editablePatientData?.pcp || patient.primaryCareProvider}
         </p>
         <p>
           <span className="font-medium text-slate-600">Insurance:</span>{" "}
-          {patient.insurance}
+          {editablePatientData?.insurance || patient.insurance}
         </p>
       </div>
     </aside>

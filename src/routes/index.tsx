@@ -16,7 +16,7 @@
 
 import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, ArrowRight, CheckCircle2 } from "lucide-react";
 
 import { PatientProvider, usePatientStore } from "../store/patientStore";
 import { PipelineProvider, usePipeline } from "../store/pipelineStore";
@@ -29,7 +29,7 @@ import { WorkflowAthena } from "../components/WorkflowAthena/WorkflowAthena";
 import { IntakeVitalsStage } from "../components/WorkflowAthena/IntakeVitalsStage";
 import { HPIStage } from "../components/WorkflowAthena/HPIStage";
 import { ExamROSStage } from "../components/WorkflowAthena/ExamROSStage";
-import { AssessmentPlanStage } from "../components/WorkflowAthena/AssessmentPlanStage";
+import { AssessmentPlanStage, type SoapNoteData } from "../components/WorkflowAthena/AssessmentPlanStage";
 import { SignLockStage } from "../components/WorkflowAthena/SignLockStage";
 import { AppShell } from "../components/AppShell";
 import {
@@ -61,9 +61,143 @@ export const Route = createFileRoute("/")({
 
 // ─── Tab Content Components ────────────────────────────────────────
 
-function SummaryTab({ patientId }: { patientId: string }) {
+interface EditablePatientData {
+  chiefComplaint: string;
+  problems: string[];
+  medications: { id: string; name: string; dosage: string; frequency: string }[];
+  allergies: string[];
+  pcp: string;
+  insurance: string;
+}
+
+interface EditableVitals {
+  bloodPressure: string;
+  heartRate: string;
+  temperature: string;
+  respiratoryRate: string;
+  oxygenSaturation: string;
+}
+
+function SummaryTab({
+  patientId,
+  editableVitals: extVitals,
+  onVitalsChange,
+  editablePatientData: extData,
+  onPatientDataChange,
+  newProblem,
+  onNewProblemChange,
+  immunizations: extImmunizations,
+  onImmunizationsChange,
+  labsResults: extLabsResults,
+  onLabsResultsChange,
+  referrals: extReferrals,
+  onReferralsChange,
+}: {
+  patientId: string;
+  editableVitals?: EditableVitals;
+  onVitalsChange?: (v: EditableVitals) => void;
+  editablePatientData?: EditablePatientData;
+  onPatientDataChange?: (d: EditablePatientData) => void;
+  newProblem?: string;
+  onNewProblemChange?: (v: string) => void;
+  immunizations?: string[];
+  onImmunizationsChange?: (v: string[]) => void;
+  labsResults?: string[];
+  onLabsResultsChange?: (v: string[]) => void;
+  referrals?: string[];
+  onReferralsChange?: (v: string[]) => void;
+}) {
   const { getPatientById } = usePatientStore();
+  const pipeline = usePipeline();
   const patient = getPatientById(patientId);
+  const isScribe = pipeline.currentRole === "scribe";
+
+  // Local fallback state when not controlled
+  const [localVitals, setLocalVitals] = useState<EditableVitals>({
+    bloodPressure: patient?.vitals.bloodPressure ?? "",
+    heartRate: patient?.vitals.heartRate?.toString() ?? "",
+    temperature: patient?.vitals.temperature?.toString() ?? "",
+    respiratoryRate: patient?.vitals.respiratoryRate?.toString() ?? "",
+    oxygenSaturation: patient?.vitals.oxygenSaturation?.toString() ?? "",
+  });
+  const [localData, setLocalData] = useState<EditablePatientData>({
+    chiefComplaint: patient?.chiefComplaint ?? "",
+    problems: [...(patient?.problems ?? [])],
+    medications: patient?.medications?.filter(m => m.status === "active").map(m => ({ id: m.id, name: m.name, dosage: m.dosage, frequency: m.frequency })) ?? [],
+    allergies: [...(patient?.allergies ?? [])],
+    pcp: patient?.primaryCareProvider ?? "",
+    insurance: patient?.insurance ?? "",
+  });
+  const [localNewProblem, setLocalNewProblem] = useState("");
+  const [medName, setMedName] = useState("");
+  const [medDosage, setMedDosage] = useState("");
+  const [medFreq, setMedFreq] = useState("");
+  const [allergyInput, setAllergyInput] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [immunInput, setImmunInput] = useState("");
+  const [labInput, setLabInput] = useState("");
+  const [referralInput, setReferralInput] = useState("");
+
+  const vitals = extVitals ?? localVitals;
+  const setVitals = onVitalsChange ?? setLocalVitals;
+  const data = extData ?? localData;
+  const setData = onPatientDataChange ?? setLocalData;
+  const addProblemText = newProblem !== undefined ? newProblem : localNewProblem;
+  const setAddProblemText = onNewProblemChange ?? setLocalNewProblem;
+  const immunizations = extImmunizations ?? [];
+  const setImmunizations = onImmunizationsChange ?? ((v: string[]) => {});
+  const labsResults = extLabsResults ?? [];
+  const setLabsResults = onLabsResultsChange ?? ((v: string[]) => {});
+  const referrals = extReferrals ?? [];
+  const setReferrals = onReferralsChange ?? ((v: string[]) => {});
+
+  const updateVital = (key: keyof EditableVitals, value: string) => {
+    setVitals({ ...vitals, [key]: value });
+  };
+
+  const updateData = (key: keyof EditablePatientData, value: any) => {
+    setData({ ...data, [key]: value });
+  };
+
+  const addProblem = () => {
+    const trimmed = addProblemText.trim();
+    if (trimmed) {
+      updateData("problems", [...data.problems, trimmed]);
+      setAddProblemText("");
+    }
+  };
+
+  const removeProblem = (idx: number) => {
+    updateData("problems", data.problems.filter((_, i) => i !== idx));
+  };
+
+  const addAllergy = (val: string) => {
+    const trimmed = val.trim();
+    if (trimmed && !data.allergies.includes(trimmed)) {
+      updateData("allergies", [...data.allergies, trimmed]);
+    }
+  };
+
+  const removeAllergy = (idx: number) => {
+    updateData("allergies", data.allergies.filter((_, i) => i !== idx));
+  };
+
+  const removeMed = (id: string) => {
+    updateData("medications", data.medications.filter(m => m.id !== id));
+  };
+
+  const addMedication = () => {
+    const name = medName.trim();
+    if (!name) return;
+    const newMed = { id: `med-${Date.now()}`, name, dosage: medDosage || "—", frequency: medFreq || "—" };
+    updateData("medications", [...data.medications, newMed]);
+    setMedName(""); setMedDosage(""); setMedFreq("");
+  };
+
+  const handleSave = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   if (!patient) return <p className="text-slate-400">Patient not found</p>;
 
@@ -81,56 +215,263 @@ function SummaryTab({ patientId }: { patientId: string }) {
               {patient.mrn}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              PCP: {patient.primaryCareProvider} | {patient.insurance}
+              {isScribe ? (
+                <>
+                  PCP: <input type="text" value={data.pcp} onChange={e => updateData("pcp", e.target.value)} className="inline w-28 rounded border border-slate-200 px-1 text-xs outline-none focus:border-blue-400" /> |
+                  Insurance: <input type="text" value={data.insurance} onChange={e => updateData("insurance", e.target.value)} className="inline w-28 rounded border border-slate-200 px-1 text-xs outline-none focus:border-blue-400" />
+                </>
+              ) : (
+                <>PCP: {patient.primaryCareProvider} | {patient.insurance}</>
+              )}
             </p>
           </div>
-          <span className="rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-            {patient.chiefComplaint}
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            {isScribe ? (
+              <input
+                type="text"
+                value={data.chiefComplaint}
+                onChange={e => updateData("chiefComplaint", e.target.value)}
+                className="rounded border border-slate-200 px-2 py-1 text-xs font-medium outline-none focus:border-blue-400 w-48 text-right"
+              />
+            ) : (
+              <span className="rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                {patient.chiefComplaint}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="clinical-card">
           <p className="clinical-label">BP</p>
-          <p className="clinical-value">{patient.vitals.bloodPressure}</p>
+          {isScribe ? (
+            <input
+              type="text"
+              value={vitals.bloodPressure}
+              onChange={(e) => updateVital("bloodPressure", e.target.value)}
+              className="clinical-value w-full rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+            />
+          ) : (
+            <p className="clinical-value">{patient.vitals.bloodPressure}</p>
+          )}
+          {(() => {
+            const parts = vitals.bloodPressure.split("/").map(s => parseFloat(s.trim()));
+            const isBad = parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && (parts[0] > 130 || parts[1] > 80);
+            return <p className={`mt-1 text-[10px] font-medium ${isBad ? "text-amber-600" : "text-green-600"}`}>{isBad ? "⚠ Elevated" : "✓ Normal"}</p>;
+          })()}
         </div>
         <div className="clinical-card">
           <p className="clinical-label">HR</p>
-          <p className="clinical-value">{patient.vitals.heartRate} bpm</p>
+          {isScribe ? (
+            <input type="text" value={vitals.heartRate} onChange={e => updateVital("heartRate", e.target.value)} className="clinical-value w-full rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400" />
+          ) : <p className="clinical-value">{patient.vitals.heartRate} bpm</p>}
+          {(() => {
+            const val = parseFloat(vitals.heartRate);
+            if (isNaN(val)) return null;
+            if (val > 100) return <p className="mt-1 text-[10px] font-medium text-red-500">⚠ Tachycardia</p>;
+            if (val < 60) return <p className="mt-1 text-[10px] font-medium text-amber-600">⚠ Bradycardia</p>;
+            return <p className="mt-1 text-[10px] font-medium text-green-600">✓ Normal</p>;
+          })()}
         </div>
         <div className="clinical-card">
           <p className="clinical-label">Temp</p>
-          <p className="clinical-value">{patient.vitals.temperature}°F</p>
+          {isScribe ? (
+            <input type="text" value={vitals.temperature} onChange={e => updateVital("temperature", e.target.value)} className="clinical-value w-full rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400" />
+          ) : <p className="clinical-value">{patient.vitals.temperature}°F</p>}
+          {(() => {
+            const val = parseFloat(vitals.temperature);
+            if (isNaN(val)) return null;
+            if (val > 99.5) return <p className="mt-1 text-[10px] font-medium text-red-500">⚠ Fever</p>;
+            if (val < 97) return <p className="mt-1 text-[10px] font-medium text-amber-600">⚠ Hypothermia</p>;
+            return <p className="mt-1 text-[10px] font-medium text-green-600">✓ Normal</p>;
+          })()}
         </div>
         <div className="clinical-card">
           <p className="clinical-label">SpO2</p>
-          <p className="clinical-value">{patient.vitals.oxygenSaturation}%</p>
+          {isScribe ? (
+            <input type="text" value={vitals.oxygenSaturation} onChange={e => updateVital("oxygenSaturation", e.target.value)} className="clinical-value w-full rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400" />
+          ) : <p className="clinical-value">{patient.vitals.oxygenSaturation}%</p>}
+          {(() => {
+            const val = parseFloat(vitals.oxygenSaturation);
+            if (isNaN(val)) return null;
+            if (val < 90) return <p className="mt-1 text-[10px] font-medium text-red-500">⚠ Critical</p>;
+            if (val < 95) return <p className="mt-1 text-[10px] font-medium text-amber-600">⚠ Low</p>;
+            return <p className="mt-1 text-[10px] font-medium text-green-600">✓ Normal</p>;
+          })()}
         </div>
       </div>
 
+      {/* Active Problems */}
       <div className="clinical-card">
         <p className="clinical-label mb-2">Active Problems</p>
         <div className="flex flex-wrap gap-2">
-          {patient.problems.map((p, i) => (
-            <span key={i} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">
+          {data.problems.map((p, i) => (
+            <span key={i} className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">
               {p}
+              {isScribe && (
+                <button onClick={() => removeProblem(i)} className="text-blue-400 hover:text-red-500">&times;</button>
+              )}
             </span>
           ))}
         </div>
+        {isScribe && (
+          <div className="mt-2 flex gap-1">
+            <input
+              type="text"
+              value={addProblemText}
+              onChange={e => setAddProblemText(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addProblem()}
+              placeholder="+ Add new problem..."
+              className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            />
+            <button onClick={addProblem} className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600">Add</button>
+          </div>
+        )}
       </div>
 
+      {/* Medications */}
+      <div className="clinical-card">
+        <p className="clinical-label mb-2">Active Medications</p>
+        {data.medications.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">No active medications</p>
+        ) : (
+          <div className="space-y-1">
+            {data.medications.map((med) => (
+              <div key={med.id} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                <span>{med.name} {med.dosage}, {med.frequency}</span>
+                {isScribe && (
+                  <button onClick={() => removeMed(med.id)} className="text-red-400 hover:text-red-600 text-[10px]">✕ Remove</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {isScribe && (
+          <div className="mt-2 space-y-1.5 rounded border border-dashed border-slate-300 p-2">
+            <div className="grid grid-cols-3 gap-1">
+              <input type="text" value={medName} onChange={e => setMedName(e.target.value)} placeholder="Medication name" className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+              <input type="text" value={medDosage} onChange={e => setMedDosage(e.target.value)} placeholder="Dosage (e.g. 10mg)" className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+              <input type="text" value={medFreq} onChange={e => setMedFreq(e.target.value)} placeholder="Frequency (e.g. BID)" className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+            </div>
+            <button onClick={addMedication} className="mt-1 rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700">+ Add Medication</button>
+          </div>
+        )}
+      </div>
+
+      {/* Allergies */}
+      <div className="clinical-card">
+        <p className="clinical-label mb-2">Allergies</p>
+        {data.allergies.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">No known allergies</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {data.allergies.map((a, i) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded bg-red-50 px-2 py-0.5 text-xs text-red-700">
+                {typeof a === "string" ? a : (a as any).allergen || JSON.stringify(a)}
+                {isScribe && (
+                  <button onClick={() => removeAllergy(i)} className="text-red-400 hover:text-red-600">&times;</button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+        {isScribe && (
+          <div className="mt-2 flex gap-1">
+            <input
+              type="text"
+              value={allergyInput}
+              onChange={e => setAllergyInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { addAllergy(allergyInput); setAllergyInput(""); }}}
+              placeholder="+ Add allergy..."
+              className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+            />
+            <button onClick={() => { addAllergy(allergyInput); setAllergyInput(""); }} className="rounded bg-red-500 px-2 py-1 text-xs text-white hover:bg-red-600">Add</button>
+          </div>
+        )}
+      </div>
+
+      {/* Immunizations */}
+      <div className="clinical-card">
+        <p className="clinical-label mb-2">Immunizations</p>
+        {immunizations.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {immunizations.map((imm, i) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-0.5 text-xs text-green-700">{imm}</span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 italic">No immunizations recorded</p>
+        )}
+        {isScribe && (
+          <div className="mt-2 flex gap-1">
+            <input type="text" value={immunInput} onChange={e => setImmunInput(e.target.value)} placeholder="+ Add immunization..." className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+            <button onClick={() => { if (immunInput.trim()) { setImmunizations([...immunizations, immunInput.trim()]); setImmunInput(""); } }} className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700">Add</button>
+          </div>
+        )}
+      </div>
+
+      {/* Labs & Results */}
+      <div className="clinical-card">
+        <p className="clinical-label mb-2">Labs & Results</p>
+        {labsResults.length > 0 ? (
+          <div className="space-y-1">
+            {labsResults.map((lab, i) => (
+              <div key={i} className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">{lab}</div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 italic">No labs recorded</p>
+        )}
+        {isScribe && (
+          <div className="mt-2 flex gap-1">
+            <input type="text" value={labInput} onChange={e => setLabInput(e.target.value)} placeholder="+ Add lab/result..." className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+            <button onClick={() => { if (labInput.trim()) { setLabsResults([...labsResults, labInput.trim()]); setLabInput(""); } }} className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700">Add</button>
+          </div>
+        )}
+      </div>
+
+      {/* Referrals */}
+      <div className="clinical-card">
+        <p className="clinical-label mb-2">Referrals</p>
+        {referrals.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {referrals.map((ref, i) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-xs text-purple-700">{ref}</span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 italic">No referrals</p>
+        )}
+        {isScribe && (
+          <div className="mt-2 flex gap-1">
+            <input type="text" value={referralInput} onChange={e => setReferralInput(e.target.value)} placeholder="+ Add referral..." className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+            <button onClick={() => { if (referralInput.trim()) { setReferrals([...referrals, referralInput.trim()]); setReferralInput(""); } }} className="rounded bg-purple-600 px-2 py-1 text-xs text-white hover:bg-purple-700">Add</button>
+          </div>
+        )}
+      </div>
+
+      {/* Save Button */}
+      {isScribe && (
+        <div className="clinical-card">
+          <button
+            onClick={handleSave}
+            className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              saved
+                ? "bg-green-500 text-white"
+                : "bg-blue-600 text-white hover:bg-blue-700"
+            }`}
+          >
+            {saved ? "✓ Changes Saved" : "Save Changes"}
+          </button>
+        </div>
+      )}
+
+      {/* Recent Encounters */}
       <div className="clinical-card">
         <p className="clinical-label mb-2">Recent Encounters</p>
         <table className="clinical-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Type</th>
-              <th>Provider</th>
-              <th>Diagnosis</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Provider</th><th>Diagnosis</th></tr></thead>
           <tbody>
             {patient.encounters.slice(0, 3).map((enc) => (
               <tr key={enc.id}>
@@ -195,10 +536,97 @@ function MedicationsTab({ patientId }: { patientId: string }) {
   );
 }
 
-function VitalsTab({ patientId }: { patientId: string }) {
+function VitalsTab({ patientId, editableVitals: extVitals, onVitalsChange }: { 
+  patientId: string; 
+  editableVitals?: EditableVitals;
+  onVitalsChange?: (v: EditableVitals) => void;
+}) {
   const { getPatientById } = usePatientStore();
+  const pipeline = usePipeline();
   const patient = getPatientById(patientId);
+  const isScribe = pipeline.currentRole === "scribe";
+
   if (!patient) return null;
+
+  // Use lifted editable vitals state when available (for right panel sync)
+  const [localBP, setLocalBP] = useState(patient.vitals.bloodPressure);
+  const [localHR, setLocalHR] = useState(patient.vitals.heartRate.toString());
+  const [localTemp, setLocalTemp] = useState(patient.vitals.temperature.toString());
+  const [localRR, setLocalRR] = useState(patient.vitals.respiratoryRate.toString());
+  const [localO2, setLocalO2] = useState(patient.vitals.oxygenSaturation.toString());
+
+  const vitals = extVitals ?? {
+    bloodPressure: localBP,
+    heartRate: localHR,
+    temperature: localTemp,
+    respiratoryRate: localRR,
+    oxygenSaturation: localO2,
+  };
+  const setVitals = onVitalsChange ?? ((v: EditableVitals) => {
+    setLocalBP(v.bloodPressure);
+    setLocalHR(v.heartRate);
+    setLocalTemp(v.temperature);
+    setLocalRR(v.respiratoryRate);
+    setLocalO2(v.oxygenSaturation);
+  });
+
+  const updateVital = (key: keyof EditableVitals, value: string) => {
+    setVitals({ ...vitals, [key]: value });
+  };
+
+  // Dynamic normal/abnormal badge logic
+  const getBadge = (type: string, valueStr: string): { className: string; label: string } => {
+    switch (type) {
+      case "bp": {
+        const parts = valueStr.split("/").map((s) => parseFloat(s.trim()));
+        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          if (parts[0] > 130 || parts[1] > 80) return { className: "badge-abnormal", label: "Elevated" };
+          return { className: "badge-normal", label: "Normal" };
+        }
+        return { className: "badge-normal", label: "Normal" };
+      }
+      case "hr": {
+        const val = parseFloat(valueStr);
+        if (!isNaN(val)) {
+          if (val > 100 || val < 60) return { className: "badge-abnormal", label: val > 100 ? "Tachycardia" : "Bradycardia" };
+          return { className: "badge-normal", label: "Normal" };
+        }
+        return { className: "badge-normal", label: "Normal" };
+      }
+      case "temp": {
+        const val = parseFloat(valueStr);
+        if (!isNaN(val)) {
+          if (val > 99.5 || val < 97) return { className: "badge-abnormal", label: val > 99.5 ? "Fever" : "Hypothermia" };
+          return { className: "badge-normal", label: "Normal" };
+        }
+        return { className: "badge-normal", label: "Normal" };
+      }
+      case "rr": {
+        const val = parseFloat(valueStr);
+        if (!isNaN(val)) {
+          if (val > 20 || val < 12) return { className: "badge-abnormal", label: "Abnormal" };
+          return { className: "badge-normal", label: "Normal" };
+        }
+        return { className: "badge-normal", label: "Normal" };
+      }
+      case "o2": {
+        const val = parseFloat(valueStr);
+        if (!isNaN(val)) {
+          if (val < 95) return { className: "badge-abnormal", label: "Low" };
+          return { className: "badge-normal", label: "Normal" };
+        }
+        return { className: "badge-normal", label: "Normal" };
+      }
+      default:
+        return { className: "badge-normal", label: "Normal" };
+    }
+  };
+
+  const bpBadge = getBadge("bp", isScribe ? vitals.bloodPressure : patient.vitals.bloodPressure);
+  const hrBadge = getBadge("hr", isScribe ? vitals.heartRate : patient.vitals.heartRate.toString());
+  const tempBadge = getBadge("temp", isScribe ? vitals.temperature : patient.vitals.temperature.toString());
+  const rrBadge = getBadge("rr", isScribe ? vitals.respiratoryRate : patient.vitals.respiratoryRate.toString());
+  const o2Badge = getBadge("o2", isScribe ? vitals.oxygenSaturation : patient.vitals.oxygenSaturation.toString());
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -215,33 +643,83 @@ function VitalsTab({ patientId }: { patientId: string }) {
           <tbody>
             <tr>
               <td>Blood Pressure</td>
-              <td className="font-medium">{patient.vitals.bloodPressure} mmHg</td>
-              <td><span className="badge-abnormal">Elevated</span></td>
+              <td className="font-medium">
+                {isScribe ? (
+                  <input
+                    type="text"
+                    value={vitals.bloodPressure}
+                    onChange={(e) => updateVital("bloodPressure", e.target.value)}
+                    className="w-28 rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  />
+                ) : (
+                  <>{patient.vitals.bloodPressure} mmHg</>
+                )}
+              </td>
+              <td><span className={bpBadge.className}>{bpBadge.label}</span></td>
             </tr>
             <tr>
               <td>Heart Rate</td>
-              <td className="font-medium">{patient.vitals.heartRate} bpm</td>
-              <td><span className="badge-normal">Normal</span></td>
+              <td className="font-medium">
+                {isScribe ? (
+                  <input
+                    type="text"
+                    value={vitals.heartRate}
+                    onChange={(e) => updateVital("heartRate", e.target.value)}
+                    className="w-28 rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  />
+                ) : (
+                  <>{patient.vitals.heartRate} bpm</>
+                )}
+              </td>
+              <td><span className={hrBadge.className}>{hrBadge.label}</span></td>
             </tr>
             <tr>
               <td>Temperature</td>
-              <td className="font-medium">{patient.vitals.temperature} °F</td>
-              <td><span className="badge-normal">Normal</span></td>
+              <td className="font-medium">
+                {isScribe ? (
+                  <input
+                    type="text"
+                    value={vitals.temperature}
+                    onChange={(e) => updateVital("temperature", e.target.value)}
+                    className="w-28 rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  />
+                ) : (
+                  <>{patient.vitals.temperature} °F</>
+                )}
+              </td>
+              <td><span className={tempBadge.className}>{tempBadge.label}</span></td>
             </tr>
             <tr>
               <td>Respiratory Rate</td>
-              <td className="font-medium">{patient.vitals.respiratoryRate} /min</td>
-              <td><span className="badge-normal">Normal</span></td>
+              <td className="font-medium">
+                {isScribe ? (
+                  <input
+                    type="text"
+                    value={vitals.respiratoryRate}
+                    onChange={(e) => updateVital("respiratoryRate", e.target.value)}
+                    className="w-28 rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  />
+                ) : (
+                  <>{patient.vitals.respiratoryRate} /min</>
+                )}
+              </td>
+              <td><span className={rrBadge.className}>{rrBadge.label}</span></td>
             </tr>
             <tr>
               <td>Oxygen Saturation</td>
-              <td className="font-medium">{patient.vitals.oxygenSaturation}%</td>
-              <td>
-                {patient.vitals.oxygenSaturation >= 95
-                  ? <span className="badge-normal">Normal</span>
-                  : <span className="badge-abnormal">Low</span>
-                }
+              <td className="font-medium">
+                {isScribe ? (
+                  <input
+                    type="text"
+                    value={vitals.oxygenSaturation}
+                    onChange={(e) => updateVital("oxygenSaturation", e.target.value)}
+                    className="w-28 rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  />
+                ) : (
+                  <>{patient.vitals.oxygenSaturation}%</>
+                )}
               </td>
+              <td><span className={o2Badge.className}>{o2Badge.label}</span></td>
             </tr>
           </tbody>
         </table>
@@ -251,6 +729,9 @@ function VitalsTab({ patientId }: { patientId: string }) {
         <p className="text-sm text-slate-600">
           {new Date(patient.vitals.recordedAt).toLocaleString()}
         </p>
+        {isScribe && (
+          <p className="mt-2 text-[10px] italic text-blue-500">Click to edit values above</p>
+        )}
       </div>
     </div>
   );
@@ -258,8 +739,22 @@ function VitalsTab({ patientId }: { patientId: string }) {
 
 function LabsTab({ patientId }: { patientId: string }) {
   const { getPatientById } = usePatientStore();
+  const pipeline = usePipeline();
   const patient = getPatientById(patientId);
+  const isScribe = pipeline.currentRole === "scribe";
+
   if (!patient) return null;
+
+  // Editable lab values
+  const [editLabValues, setEditLabValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    patient.labResults.forEach((lab) => { init[lab.id] = lab.value; });
+    return init;
+  });
+
+  const updateLabValue = (id: string, val: string) => {
+    setEditLabValues((prev) => ({ ...prev, [id]: val }));
+  };
 
   return (
     <div className="clinical-card">
@@ -279,7 +774,18 @@ function LabsTab({ patientId }: { patientId: string }) {
           {patient.labResults.map((lab) => (
             <tr key={lab.id}>
               <td className="font-medium">{lab.testName}</td>
-              <td>{lab.value}</td>
+              <td>
+                {isScribe ? (
+                  <input
+                    type="text"
+                    value={editLabValues[lab.id] ?? lab.value}
+                    onChange={(e) => updateLabValue(lab.id, e.target.value)}
+                    className="w-20 rounded border border-slate-200 px-2 py-0.5 text-sm outline-none focus:border-blue-400"
+                  />
+                ) : (
+                  <>{lab.value}</>
+                )}
+              </td>
               <td className="text-xs text-slate-500">{lab.unit}</td>
               <td className="text-xs text-slate-500">{lab.referenceRange}</td>
               <td>
@@ -302,6 +808,9 @@ function LabsTab({ patientId }: { patientId: string }) {
           ))}
         </tbody>
       </table>
+      {isScribe && (
+        <p className="mt-2 text-[10px] italic text-blue-500">Edit lab values above for charting practice</p>
+      )}
     </div>
   );
 }
@@ -490,9 +999,60 @@ function Home() {
   const [selectedPatientId, setSelectedPatientId] = useState(patients[0]?.id ?? "");
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const { currentRole } = usePipeline();
+  const { currentRole, submitToCoding, setRole } = usePipeline();
   const [activeStage, setActiveStage] = useState("intake-vitals");
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set(["intake-vitals"]));
+
+  // SOAP note state lifted from AssessmentPlanStage for pipeline submission
+  const [soapNote, setSoapNote] = useState<SoapNoteData>({
+    subjective: "",
+    objective: "",
+    assessment: "",
+    plan: "",
+  });
+  const [submittedToCoding, setSubmittedToCoding] = useState(false);
+  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+
+  // Shared editable vitals state across SummaryTab, VitalsTab, and RightPaneleCW
+  const [editableVitals, setEditableVitals] = useState({
+    bloodPressure: patients[0]?.vitals.bloodPressure ?? "120/80",
+    heartRate: patients[0]?.vitals.heartRate?.toString() ?? "72",
+    temperature: patients[0]?.vitals.temperature?.toString() ?? "98.6",
+    respiratoryRate: patients[0]?.vitals.respiratoryRate?.toString() ?? "16",
+    oxygenSaturation: patients[0]?.vitals.oxygenSaturation?.toString() ?? "98",
+  });
+
+  // Shared editable patient data for scribe mode (persists across tab switches)
+  const [editablePatientData, setEditablePatientData] = useState({
+    chiefComplaint: patients[0]?.chiefComplaint ?? "",
+    problems: [...(patients[0]?.problems ?? [])],
+    medications: patients[0]?.medications ? patients[0].medications.filter(m => m.status === "active").map(m => ({ id: m.id, name: m.name, dosage: m.dosage, frequency: m.frequency })) : [],
+    allergies: patients[0]?.allergies ? [...patients[0].allergies] : [],
+    pcp: patients[0]?.primaryCareProvider ?? "",
+    insurance: patients[0]?.insurance ?? "",
+  });
+  const [newProblem, setNewProblem] = useState("");
+  // Shared lists across Summary + tabs (real-time sync)
+  const [sharedImmunizations, setSharedImmunizations] = useState<string[]>([]);
+  const [sharedLabs, setSharedLabs] = useState<string[]>([]);
+  const [sharedReferrals, setSharedReferrals] = useState<string[]>([]);
+  const [sharedOrders, setSharedOrders] = useState<string[]>([]);
+  const [sharedImaging, setSharedImaging] = useState<string[]>([]);
+
+  // When selected patient changes, reset editable data to match
+  useEffect(() => {
+    const p = patients.find(pp => pp.id === selectedPatientId) || patients[0];
+    if (p) {
+      setEditablePatientData({
+        chiefComplaint: p.chiefComplaint ?? "",
+        problems: [...(p.problems ?? [])],
+        medications: p.medications ? p.medications.filter(m => m.status === "active").map(m => ({ id: m.id, name: m.name, dosage: m.dosage, frequency: m.frequency })) : [],
+        allergies: p.allergies ? [...p.allergies] : [],
+        pcp: p.primaryCareProvider ?? "",
+        insurance: p.insurance ?? "",
+      });
+    }
+  }, [selectedPatientId]);
 
   // Check login on mount
   useEffect(() => {
@@ -514,6 +1074,31 @@ function Home() {
   if (!isLoggedIn()) {
     return <PublicLandingPage />;
   }
+
+  // Handle sign & lock — compiles the SOAP note and submits to coding pipeline
+  const handleSignAndLock = () => {
+    setIsSubmittingNote(true);
+    // Compile full note string from all quadrants
+    const fullNote = [
+      soapNote.subjective ? `SUBJECTIVE:\n${soapNote.subjective}` : "",
+      soapNote.objective ? `OBJECTIVE:\n${soapNote.objective}` : "",
+      soapNote.assessment ? `ASSESSMENT:\n${soapNote.assessment}` : "",
+      soapNote.plan ? `PLAN:\n${soapNote.plan}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    // Simulate brief submission delay for UX
+    setTimeout(() => {
+      submitToCoding(fullNote);
+      setIsSubmittingNote(false);
+      setSubmittedToCoding(true);
+      // Mark sign-lock as completed
+      const updated = new Set(completedStages);
+      updated.add("sign-lock");
+      setCompletedStages(updated);
+    }, 800);
+  };
 
   const toggleStageComplete = (stageId: string) => {
     const updated = new Set(completedStages);
@@ -562,7 +1147,7 @@ function Home() {
         ) : undefined
       }
       rightPanel={
-        <RightPaneleCW patient={selectedPatient ?? null} />
+        <RightPaneleCW patient={selectedPatient ?? null} editableVitals={editableVitals} editablePatientData={editablePatientData} sharedImmunizations={sharedImmunizations} sharedLabs={sharedLabs} sharedReferrals={sharedReferrals} sharedOrders={sharedOrders} sharedImaging={sharedImaging} soapNote={soapNote} />
       }
       showRightPanel={showRightPanel}
       footer={
@@ -627,7 +1212,15 @@ function Home() {
           <>
             {/* ─── Daily Schedule ─── */}
             <WorkspacePanel id="schedule" activeWorkspace={activeWorkspace}>
-              <DailySchedule />
+              <DailySchedule onSelectPatient={(name) => {
+                const match = patients.find(p => `${p.firstName} ${p.lastName}`.toLowerCase() === name.toLowerCase());
+                if (match) {
+                  setSelectedPatientId(match.id);
+                  setRole("scribe");
+                  setActiveWorkspace("chart");
+                  setActiveStage("intake-vitals");
+                }
+              }} />
             </WorkspacePanel>
 
             {/* ─── Patient Chart Review ─── */}
@@ -671,22 +1264,60 @@ function Home() {
                       <HPIStage
                         patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
                         chiefComplaint={selectedPatient.chiefComplaint}
+                        note={soapNote}
+                        onNoteChange={setSoapNote}
                       />
                     )}
                     {activeStage === "exam-ros" && (
                       <ExamROSStage
                         patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
+                        note={soapNote}
+                        onNoteChange={setSoapNote}
                       />
                     )}
                     {activeStage === "assessment-plan" && (
                       <AssessmentPlanStage
                         patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
+                        note={soapNote}
+                        onNoteChange={setSoapNote}
                       />
                     )}
-                    {activeStage === "sign-lock" && (
+                    {activeStage === "sign-lock" && !submittedToCoding && (
                       <SignLockStage
                         patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
+                        note={soapNote}
+                        onSignAndLock={handleSignAndLock}
+                        isSubmitting={isSubmittingNote}
                       />
+                    )}
+                    {activeStage === "sign-lock" && submittedToCoding && (
+                      <div className="flex flex-col items-center justify-center py-12">
+                        <div className="rounded-full bg-green-100 p-4">
+                          <CheckCircle2 className="h-12 w-12 text-green-600" />
+                        </div>
+                        <h3 className="mt-4 text-xl font-bold text-slate-800">Note Submitted Successfully!</h3>
+                        <p className="mt-2 max-w-md text-center text-sm text-slate-500">
+                          The clinical note has been signed, locked, and submitted to the Coding queue.
+                          The pipeline now advances to the Medical Coder stage for ICD-10 and CPT code extraction.
+                        </p>
+                        <div className="mt-6 flex flex-wrap justify-center gap-3">
+                          <button
+                            onClick={() => {
+                              setSubmittedToCoding(false);
+                              setActiveStage("");
+                            }}
+                            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                          >
+                            Return to Chart Review
+                          </button>
+                          <button
+                            onClick={() => setRole("coder")}
+                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                          >
+                            Switch to Coder Role
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -698,16 +1329,58 @@ function Home() {
                   />
                   <div className="flex-1 overflow-y-auto p-4">
                     <TabPanel id="summary" activeTab={activeTab}>
-                      <SummaryTab patientId={selectedPatientId} />
+                      <SummaryTab
+                        patientId={selectedPatientId}
+                        editableVitals={editableVitals}
+                        onVitalsChange={setEditableVitals}
+                        editablePatientData={editablePatientData}
+                        onPatientDataChange={setEditablePatientData}
+                        newProblem={newProblem}
+                        onNewProblemChange={setNewProblem}
+                        immunizations={sharedImmunizations}
+                        onImmunizationsChange={setSharedImmunizations}
+                        labsResults={sharedLabs}
+                        onLabsResultsChange={setSharedLabs}
+                        referrals={sharedReferrals}
+                        onReferralsChange={setSharedReferrals}
+                      />
                     </TabPanel>
                     <TabPanel id="vitals" activeTab={activeTab}>
-                      <VitalsTab patientId={selectedPatientId} />
+                      <VitalsTab patientId={selectedPatientId} editableVitals={editableVitals} onVitalsChange={setEditableVitals} />
                     </TabPanel>
                     <TabPanel id="medications" activeTab={activeTab}>
                       <MedicationsTab patientId={selectedPatientId} />
                     </TabPanel>
                     <TabPanel id="labs" activeTab={activeTab}>
-                      <LabsTab patientId={selectedPatientId} />
+                      <div className="clinical-card">
+                        <p className="clinical-label mb-3">Labs & Results</p>
+                        {currentRole === "scribe" ? (
+                          <div className="space-y-2">
+                            <div className="flex gap-1">
+                              <input type="text" id="newLabInput" placeholder="e.g. CBC: WBC 6.5, Hgb 13.2" className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+                              <button onClick={() => {
+                                const inp = document.getElementById("newLabInput") as HTMLInputElement;
+                                if (inp && inp.value.trim()) {
+                                  setSharedLabs([...sharedLabs, inp.value.trim()]);
+                                  inp.value = "";
+                                }
+                              }} className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700">Add</button>
+                            </div>
+                            <div className="space-y-1">
+                              {sharedLabs.length === 0 ? <p className="text-xs text-slate-400 italic">No labs added yet.</p> : sharedLabs.map((o, i) => (
+                                <div key={i} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                                  <span>{o}</span>
+                                  <button onClick={() => setSharedLabs(sharedLabs.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[10px]">\u2715</button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : sharedLabs.length > 0 ? (
+                          <div className="space-y-1">{sharedLabs.map((o, i) => <div key={i} className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">{o}</div>)}</div>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No labs recorded.</p>
+                        )}
+                      </div>
                     </TabPanel>
                     <TabPanel id="problems" activeTab={activeTab}>
                       <div className="clinical-card">
@@ -724,9 +1397,35 @@ function Home() {
                     <TabPanel id="orders" activeTab={activeTab}>
                       <div className="clinical-card">
                         <p className="clinical-label mb-3">Active Orders</p>
-                        <p className="text-sm text-slate-400 italic">
-                          Orders module coming soon — will integrate with plan &amp; workflow.
-                        </p>
+                        <p className="text-xs text-slate-400 mb-2">Manage orders for this encounter. Items appear in Summary.</p>
+                        {currentRole === "scribe" ? (
+                          <div className="space-y-2">
+                            <div className="flex gap-1">
+                              <input type="text" id="newOrderInput" placeholder="e.g. CBC, CMP, Chest X-ray..." className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+                              <button onClick={() => {
+                                const inp = document.getElementById("newOrderInput") as HTMLInputElement;
+                                if (inp && inp.value.trim()) {
+                                  setSharedOrders([...sharedOrders, inp.value.trim()]);
+                                  inp.value = "";
+                                }
+                              }} className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700">Add</button>
+                            </div>
+                            <div className="space-y-1">
+                              {sharedOrders.length === 0 ? <p className="text-xs text-slate-400 italic">No orders added yet.</p> : sharedOrders.map((o, i) => (
+                                <div key={i} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                                  <span>{o}</span>
+                                  <button onClick={() => setSharedOrders(sharedOrders.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : sharedOrders.length > 0 ? (
+                          <div className="space-y-1">
+                            {sharedOrders.map((o, i) => <div key={i} className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">{o}</div>)}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No active orders.</p>
+                        )}
                       </div>
                     </TabPanel>
                     <TabPanel id="notes" activeTab={activeTab}>
@@ -745,19 +1444,100 @@ function Home() {
                     <TabPanel id="imaging" activeTab={activeTab}>
                       <div className="clinical-card">
                         <p className="clinical-label mb-3">Imaging Studies</p>
-                        <p className="text-sm text-slate-400 italic">Imaging module coming soon.</p>
+                        {currentRole === "scribe" ? (
+                          <div className="space-y-2">
+                            <div className="flex gap-1">
+                              <input type="text" id="newImagingInput" placeholder="e.g. Chest X-ray, MRI Brain..." className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+                              <button onClick={() => {
+                                const inp = document.getElementById("newImagingInput") as HTMLInputElement;
+                                if (inp && inp.value.trim()) {
+                                  setSharedImaging([...sharedImaging, inp.value.trim()]);
+                                  inp.value = "";
+                                }
+                              }} className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700">Add</button>
+                            </div>
+                            <div className="space-y-1">
+                              {sharedImaging.length === 0 ? <p className="text-xs text-slate-400 italic">No imaging added yet.</p> : sharedImaging.map((o, i) => (
+                                <div key={i} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                                  <span>{o}</span>
+                                  <button onClick={() => setSharedImaging(sharedImaging.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : sharedImaging.length > 0 ? (
+                          <div className="space-y-1">
+                            {sharedImaging.map((o, i) => <div key={i} className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">{o}</div>)}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No imaging studies ordered.</p>
+                        )}
                       </div>
                     </TabPanel>
                     <TabPanel id="immunizations" activeTab={activeTab}>
                       <div className="clinical-card">
                         <p className="clinical-label mb-3">Immunizations</p>
-                        <p className="text-sm text-slate-400 italic">Immunization records coming soon.</p>
+                        {currentRole === "scribe" ? (
+                          <div className="space-y-2">
+                            <div className="flex gap-1">
+                              <input type="text" id="newImmunInput2" placeholder="e.g. Influenza 2024, COVID-19 Booster..." className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+                              <button onClick={() => {
+                                const inp = document.getElementById("newImmunInput2") as HTMLInputElement;
+                                if (inp && inp.value.trim()) {
+                                  setSharedImmunizations([...sharedImmunizations, inp.value.trim()]);
+                                  inp.value = "";
+                                }
+                              }} className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700">Add</button>
+                            </div>
+                            <div className="space-y-1">
+                              {sharedImmunizations.length === 0 ? <p className="text-xs text-slate-400 italic">No immunizations added yet.</p> : sharedImmunizations.map((o, i) => (
+                                <div key={i} className="flex items-center justify-between rounded bg-green-50 px-2 py-1 text-xs text-green-700">
+                                  <span>{o}</span>
+                                  <button onClick={() => setSharedImmunizations(sharedImmunizations.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : sharedImmunizations.length > 0 ? (
+                          <div className="space-y-1">
+                            {sharedImmunizations.map((o, i) => <div key={i} className="rounded bg-green-50 px-2 py-1 text-xs text-green-700">{o}</div>)}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No immunizations recorded.</p>
+                        )}
                       </div>
                     </TabPanel>
                     <TabPanel id="referrals" activeTab={activeTab}>
                       <div className="clinical-card">
                         <p className="clinical-label mb-3">Referrals</p>
-                        <p className="text-sm text-slate-400 italic">Referral tracking coming soon.</p>
+                        {currentRole === "scribe" ? (
+                          <div className="space-y-2">
+                            <div className="flex gap-1">
+                              <input type="text" id="newRefInput2" placeholder="e.g. Cardiology, Orthopedics..." className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+                              <button onClick={() => {
+                                const inp = document.getElementById("newRefInput2") as HTMLInputElement;
+                                if (inp && inp.value.trim()) {
+                                  setSharedReferrals([...sharedReferrals, inp.value.trim()]);
+                                  inp.value = "";
+                                }
+                              }} className="rounded bg-purple-600 px-2 py-1 text-xs text-white hover:bg-purple-700">Add</button>
+                            </div>
+                            <div className="space-y-1">
+                              {sharedReferrals.length === 0 ? <p className="text-xs text-slate-400 italic">No referrals added yet.</p> : sharedReferrals.map((o, i) => (
+                                <div key={i} className="flex items-center justify-between rounded bg-purple-50 px-2 py-1 text-xs text-purple-700">
+                                  <span>{o}</span>
+                                  <button onClick={() => setSharedReferrals(sharedReferrals.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : sharedReferrals.length > 0 ? (
+                          <div className="space-y-1">
+                            {sharedReferrals.map((o, i) => <div key={i} className="rounded bg-purple-50 px-2 py-1 text-xs text-purple-700">{o}</div>)}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No referrals recorded.</p>
+                        )}
                       </div>
                     </TabPanel>
                   </div>
