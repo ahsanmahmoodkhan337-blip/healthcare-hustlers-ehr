@@ -10,7 +10,33 @@
  *   - DrChrono's appointment-based chronology
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
+
+// ─── Audit Log ────────────────────────────────────────────────────
+
+export interface AuditEntry {
+  timestamp: string;
+  role: string;
+  message: string;
+  status: "success" | "warning" | "error" | "info";
+}
+
+export type QueueStage =
+  | "QUEUE_REGISTRATION"
+  | "QUEUE_ELIGIBILITY"
+  | "QUEUE_SCRIBE"
+  | "QUEUE_CODER"
+  | "QUEUE_BILLER"
+  | "QUEUE_PA"
+  | "QUEUE_AR"
+  | "QUEUE_PAID";
+
+export interface CaseState {
+  patientId: string;
+  currentQueue: QueueStage;
+  auditLogs: AuditEntry[];
+  modifier25Applied: boolean;
+}
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -749,18 +775,43 @@ interface PatientContextValue {
   patients: Patient[];
   getPatientById: (id: string) => Patient | undefined;
   getPatientByMrn: (mrn: string) => Patient | undefined;
+  caseStates: Record<string, CaseState>;
+  addAuditLog: (patientId: string, entry: AuditEntry) => void;
+  setQueueStage: (patientId: string, stage: QueueStage) => void;
+  setModifier25: (patientId: string, applied: boolean) => void;
 }
 
 const PatientContext = createContext<PatientContextValue | null>(null);
 
 export function PatientProvider({ children }: { children: ReactNode }) {
+  const [caseStates, setCaseStates] = useState<Record<string, CaseState>>({});
   const getPatientById = (id: string) => mockPatients.find((p) => p.id === id);
   const getPatientByMrn = (mrn: string) =>
     mockPatients.find((p) => p.mrn === mrn);
-
+  const addAuditLog = (patientId: string, entry: AuditEntry) => {
+    setCaseStates(prev => {
+      const cs = prev[patientId] ? { ...prev[patientId] } : { patientId, currentQueue: "QUEUE_REGISTRATION" as QueueStage, auditLogs: [], modifier25Applied: false };
+      cs.auditLogs = [...cs.auditLogs, entry];
+      return { ...prev, [patientId]: cs };
+    });
+  };
+  const setQueueStage = (patientId: string, stage: QueueStage) => {
+    setCaseStates(prev => {
+      const cs = prev[patientId] ? { ...prev[patientId] } : { patientId, currentQueue: "QUEUE_REGISTRATION" as QueueStage, auditLogs: [], modifier25Applied: false };
+      cs.currentQueue = stage;
+      return { ...prev, [patientId]: cs };
+    });
+  };
+  const setModifier25 = (patientId: string, applied: boolean) => {
+    setCaseStates(prev => {
+      const cs = prev[patientId] ? { ...prev[patientId] } : { patientId, currentQueue: "QUEUE_REGISTRATION" as QueueStage, auditLogs: [], modifier25Applied: false };
+      cs.modifier25Applied = applied;
+      return { ...prev, [patientId]: cs };
+    });
+  };
   return (
     <PatientContext.Provider
-      value={{ patients: mockPatients, getPatientById, getPatientByMrn }}
+      value={{ patients: mockPatients, getPatientById, getPatientByMrn, caseStates, addAuditLog, setQueueStage, setModifier25 }}
     >
       {children}
     </PatientContext.Provider>

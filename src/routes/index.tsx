@@ -28,6 +28,8 @@ import { Header } from "../components/TabsEpic/Header";
 import { RightPaneleCW } from "../components/RightPaneleCW/RightPaneleCW";
 import { WorkflowAthena } from "../components/WorkflowAthena/WorkflowAthena";
 import { IntakeVitalsStage } from "../components/WorkflowAthena/IntakeVitalsStage";
+import { RegistrationStage } from "../components/WorkflowAthena/RegistrationStage";
+import { EligibilityStage } from "../components/WorkflowAthena/EligibilityStage";
 import { HPIStage } from "../components/WorkflowAthena/HPIStage";
 import { ExamROSStage } from "../components/WorkflowAthena/ExamROSStage";
 import { AssessmentPlanStage, type SoapNoteData } from "../components/WorkflowAthena/AssessmentPlanStage";
@@ -47,6 +49,9 @@ import { StagePinGate } from "../components/StagePinGate";
 import { CodingQueue } from "../components/CodingQueue/CodingQueue";
 import { BillingLedger } from "../components/BillingLedger/BillingLedger";
 import PriorAuthPortal from "../components/PriorAuthPortal/PriorAuthPortal";
+import { GamificationHeader } from "../components/GamificationHeader";
+import { WorklistPanel } from "../components/WorklistPanel";
+import { FinancialLedger } from "../components/FinancialLedger";
 
 // ─── Route ──────────────────────────────────────────────────────────
 
@@ -1035,8 +1040,11 @@ function Home() {
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const { currentRole, submitToCoding, setRole, paRecords } = usePipeline();
-  const [activeStage, setActiveStage] = useState("intake-vitals");
-  const [completedStages, setCompletedStages] = useState<Set<string>>(new Set(["intake-vitals"]));
+  const [activeStage, setActiveStage] = useState("registration");
+  const [completedStages, setCompletedStages] = useState<Set<string>>(new Set(["registration"]));
+  const [xp, setXp] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [level, setLevel] = useState(1);
 
   // SOAP note state lifted from AssessmentPlanStage for pipeline submission
   const [soapNote, setSoapNote] = useState<SoapNoteData>({
@@ -1158,8 +1166,8 @@ function Home() {
       setSoapNote({ subjective: "", objective: "", assessment: "", plan: "" });
       setSubmittedToCoding(false);
       setDisplayName(undefined);
-      setActiveStage("intake-vitals");
-      setCompletedStages(new Set(["intake-vitals"]));
+      setActiveStage("registration");
+      setCompletedStages(new Set(["registration"]));
     }
   }
 
@@ -1234,7 +1242,7 @@ function Home() {
     } else {
       updated.add(stageId);
       // Auto-advance to next stage
-      const stageOrder = ["intake-vitals", "hpi", "exam-ros", "assessment-plan", "sign-lock"];
+      const stageOrder = ["registration", "eligibility", "intake-vitals", "hpi", "exam-ros", "assessment-plan", "sign-lock"];
       const currentIdx = stageOrder.indexOf(stageId);
       if (currentIdx >= 0 && currentIdx < stageOrder.length - 1) {
         setActiveStage(stageOrder[currentIdx + 1]);
@@ -1248,33 +1256,50 @@ function Home() {
   return (
     <AppShell
       header={
-        <Header
-          businessName={businessName}
-          selectedPatientId={selectedPatientId}
-          onPatientSelect={(id) => { saveCurrentSession(); setSelectedPatientId(id); setDisplayName(undefined); setRole("scribe"); setActiveWorkspace("chart"); setActiveStage("intake-vitals"); }}
-          showRightPanel={showRightPanel}
-          onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
-          selectedPatientName={
-            selectedPatient
-              ? `${selectedPatient.lastName}, ${selectedPatient.firstName}`
-              : undefined
-          }
-        />
+        <>
+          <GamificationHeader xp={xp} streak={streak} level={level} />
+          <Header
+            businessName={businessName}
+            selectedPatientId={selectedPatientId}
+            onPatientSelect={(id) => { saveCurrentSession(); setSelectedPatientId(id); setDisplayName(undefined); setRole("scribe"); setActiveWorkspace("chart"); setActiveStage("registration"); }}
+            showRightPanel={showRightPanel}
+            onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
+            selectedPatientName={
+              selectedPatient
+                ? `${selectedPatient.lastName}, ${selectedPatient.firstName}`
+                : undefined
+            }
+          />
+        </>
       }
       leftPanel={
-        selectedPatient && currentRole === "scribe" ? (
-          <div className="p-4">
-            <WorkflowAthena
-              activeStage={activeStage}
-              onStageSelect={setActiveStage}
-              completedStages={completedStages}
-              onToggleStageComplete={toggleStageComplete}
-            />
+        <div className="flex h-full flex-col">
+          <div className="border-b border-slate-100 px-4 py-3">
+            <WorklistPanel patients={patients} selectedPatientId={selectedPatientId} onPatientSelect={(id) => { saveCurrentSession(); setSelectedPatientId(id); setDisplayName(undefined); setRole("scribe"); setActiveWorkspace("chart"); setActiveStage("registration"); }} />
           </div>
-        ) : undefined
+          {selectedPatient && currentRole === "scribe" && (
+            <div className="flex-1 overflow-y-auto p-4">
+              <WorkflowAthena
+                activeStage={activeStage}
+                onStageSelect={setActiveStage}
+                completedStages={completedStages}
+                onToggleStageComplete={toggleStageComplete}
+              />
+            </div>
+          )}
+        </div>
       }
       rightPanel={
-        <RightPaneleCW patient={selectedPatient ?? null} displayName={displayName} editableVitals={editableVitals} editablePatientData={editablePatientData} sharedImmunizations={sharedImmunizations} sharedLabs={sharedLabs} sharedReferrals={sharedReferrals} sharedOrders={sharedOrders} sharedImaging={sharedImaging} soapNote={soapNote} paRecords={paRecords} />
+        <div className="flex h-full flex-col">
+          <div className="flex-1 overflow-y-auto">
+            <RightPaneleCW patient={selectedPatient ?? null} displayName={displayName} editableVitals={editableVitals} editablePatientData={editablePatientData} sharedImmunizations={sharedImmunizations} sharedLabs={sharedLabs} sharedReferrals={sharedReferrals} sharedOrders={sharedOrders} sharedImaging={sharedImaging} soapNote={soapNote} paRecords={paRecords} />
+          </div>
+          {currentRole !== "scribe" && (
+            <div className="border-t border-slate-100 p-3">
+              <FinancialLedger totalBilled={12500} totalCollected={8700} totalDenied={2400} daysInAR={32} />
+            </div>
+          )}
+        </div>
       }
       showRightPanel={showRightPanel}
       footer={
@@ -1402,7 +1427,9 @@ function Home() {
                   <div className="border-b border-blue-100 bg-blue-50/50 px-4 py-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-blue-700">
-                        Workflow: {activeStage === "intake-vitals" ? "Intake / Vitals" :
+                        Workflow: {activeStage === "registration" ? "Patient Registration" :
+                              activeStage === "eligibility" ? "Eligibility & Prior Auth" :
+                            activeStage === "intake-vitals" ? "Intake / Vitals" :
                                     activeStage === "hpi" ? "History of Present Illness" :
                                     activeStage === "exam-ros" ? "Review of Systems" :
                                     activeStage === "assessment-plan" ? "Assessment & Plan" :
@@ -1417,6 +1444,12 @@ function Home() {
                     </div>
                   </div>
                   <div className="flex-1 overflow-y-auto p-4">
+                    {activeStage === "registration" && (
+                      <RegistrationStage />
+                    )}
+                    {activeStage === "eligibility" && (
+                      <EligibilityStage />
+                    )}
                     {activeStage === "intake-vitals" && (
                       <IntakeVitalsStage patientId={selectedPatientId} editableVitals={editableVitals} onVitalsChange={setEditableVitals} />
                     )}
