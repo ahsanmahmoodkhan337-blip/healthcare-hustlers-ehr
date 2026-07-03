@@ -1033,7 +1033,7 @@ function PublicLandingPage() {
 
 function Home() {
   const businessName = "Healthcare Hustlers";
-  const { patients } = usePatientStore();
+  const { patients, caseStates } = usePatientStore();
   const { activeTab, setActiveTab } = useTabsEpic("summary");
   const { activeWorkspace, setActiveWorkspace } = useWorkspaceTabs("chart");
   const [selectedPatientId, setSelectedPatientId] = useState(patients[0]?.id ?? "");
@@ -1786,6 +1786,33 @@ function Home() {
       </div>
       </>
     )}
+      {/* ─── Activity Log Stream ─── */}
+      {selectedPatient && (
+        <div className="border-t border-slate-200 bg-white/80 backdrop-blur-sm">
+          <div className="px-4 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Activity Log</span>
+              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] text-slate-500">{caseStates[selectedPatientId]?.auditLogs?.length ?? 0}</span>
+            </div>
+            <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
+              {(caseStates[selectedPatientId]?.auditLogs ?? []).length === 0 ? (
+                <p className="text-[10px] text-slate-400 italic">No activity recorded yet.</p>
+              ) : (
+                (caseStates[selectedPatientId]?.auditLogs ?? []).slice(-10).map((log, i) => (
+                  <div key={i} className={`shrink-0 rounded-lg border px-2 py-1 text-[9px] ${
+                    log.status === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
+                    log.status === "warning" ? "border-amber-200 bg-amber-50 text-amber-700" :
+                    log.status === "error" ? "border-rose-200 bg-rose-50 text-rose-700" :
+                    "border-slate-200 bg-slate-50 text-slate-600"
+                  }`}>
+                    <span className="font-medium">{log.role}</span>: {log.message}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

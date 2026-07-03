@@ -36,6 +36,18 @@ export interface CaseState {
   currentQueue: QueueStage;
   auditLogs: AuditEntry[];
   modifier25Applied: boolean;
+  // Phase 3: inter-departmental hand-off
+  billingStatus: "DRAFT" | "SCRUB_FAILED" | "PENDING_PA_ROUTE" | "READY_TO_SUBMIT" | "CLEARED_AND_SENT";
+  paStatus: "NOT_REQUIRED" | "REQUIRED_MISSING" | "PENDING_REVIEW" | "APPROVED";
+  arStatus: "NONE" | "DENIED_QUEUE" | "APPEAL_PENDING" | "RESOLVED";
+  routingNotes: RoutingNote[];
+}
+
+export interface RoutingNote {
+  timestamp: string;
+  fromRole: string;
+  toRole: string;
+  noteText: string;
 }
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -779,7 +791,22 @@ interface PatientContextValue {
   addAuditLog: (patientId: string, entry: AuditEntry) => void;
   setQueueStage: (patientId: string, stage: QueueStage) => void;
   setModifier25: (patientId: string, applied: boolean) => void;
+  setBillingStatus: (patientId: string, status: CaseState["billingStatus"]) => void;
+  setPaStatus: (patientId: string, status: CaseState["paStatus"]) => void;
+  setArStatus: (patientId: string, status: CaseState["arStatus"]) => void;
+  addRoutingNote: (patientId: string, note: RoutingNote) => void;
 }
+
+const DEFAULT_CASE = (patientId: string): CaseState => ({
+  patientId,
+  currentQueue: "QUEUE_REGISTRATION" as QueueStage,
+  auditLogs: [],
+  modifier25Applied: false,
+  billingStatus: "DRAFT",
+  paStatus: "NOT_REQUIRED",
+  arStatus: "NONE",
+  routingNotes: [],
+});
 
 const PatientContext = createContext<PatientContextValue | null>(null);
 
@@ -788,30 +815,39 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const getPatientById = (id: string) => mockPatients.find((p) => p.id === id);
   const getPatientByMrn = (mrn: string) =>
     mockPatients.find((p) => p.mrn === mrn);
+
+  const updateCase = (patientId: string, updater: (cs: CaseState) => CaseState) => {
+    setCaseStates(prev => ({
+      ...prev,
+      [patientId]: updater(prev[patientId] || DEFAULT_CASE(patientId)),
+    }));
+  };
+
   const addAuditLog = (patientId: string, entry: AuditEntry) => {
-    setCaseStates(prev => {
-      const cs = prev[patientId] ? { ...prev[patientId] } : { patientId, currentQueue: "QUEUE_REGISTRATION" as QueueStage, auditLogs: [], modifier25Applied: false };
-      cs.auditLogs = [...cs.auditLogs, entry];
-      return { ...prev, [patientId]: cs };
-    });
+    updateCase(patientId, cs => ({ ...cs, auditLogs: [...cs.auditLogs, entry] }));
   };
   const setQueueStage = (patientId: string, stage: QueueStage) => {
-    setCaseStates(prev => {
-      const cs = prev[patientId] ? { ...prev[patientId] } : { patientId, currentQueue: "QUEUE_REGISTRATION" as QueueStage, auditLogs: [], modifier25Applied: false };
-      cs.currentQueue = stage;
-      return { ...prev, [patientId]: cs };
-    });
+    updateCase(patientId, cs => ({ ...cs, currentQueue: stage }));
   };
   const setModifier25 = (patientId: string, applied: boolean) => {
-    setCaseStates(prev => {
-      const cs = prev[patientId] ? { ...prev[patientId] } : { patientId, currentQueue: "QUEUE_REGISTRATION" as QueueStage, auditLogs: [], modifier25Applied: false };
-      cs.modifier25Applied = applied;
-      return { ...prev, [patientId]: cs };
-    });
+    updateCase(patientId, cs => ({ ...cs, modifier25Applied: applied }));
   };
+  const setBillingStatus = (patientId: string, status: CaseState["billingStatus"]) => {
+    updateCase(patientId, cs => ({ ...cs, billingStatus: status }));
+  };
+  const setPaStatus = (patientId: string, status: CaseState["paStatus"]) => {
+    updateCase(patientId, cs => ({ ...cs, paStatus: status }));
+  };
+  const setArStatus = (patientId: string, status: CaseState["arStatus"]) => {
+    updateCase(patientId, cs => ({ ...cs, arStatus: status }));
+  };
+  const addRoutingNote = (patientId: string, note: RoutingNote) => {
+    updateCase(patientId, cs => ({ ...cs, routingNotes: [...cs.routingNotes, note] }));
+  };
+
   return (
     <PatientContext.Provider
-      value={{ patients: mockPatients, getPatientById, getPatientByMrn, caseStates, addAuditLog, setQueueStage, setModifier25 }}
+      value={{ patients: mockPatients, getPatientById, getPatientByMrn, caseStates, addAuditLog, setQueueStage, setModifier25, setBillingStatus, setPaStatus, setArStatus, addRoutingNote }}
     >
       {children}
     </PatientContext.Provider>
