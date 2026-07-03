@@ -1,18 +1,17 @@
 {
-  "name": "team-site-template",
+  "name": "healthcare-hustlers-ehr",
   "private": true,
   "sideEffects": false,
   "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "start": "bun run serve.ts",
+    "start": "vite preview --host 0.0.0.0 --port 3000",
     "publish": "bash ./publish.sh",
     "format": "prettier --write ."
   },
   "dependencies": {
     "@tanstack/react-router": "^1.158.1",
-    "@tanstack/react-start": "^1.158.3",
     "lucide-react": "^1.22.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

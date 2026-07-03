@@ -21,6 +21,7 @@ import { Activity, ArrowRight, CheckCircle2 } from "lucide-react";
 import { PatientProvider, usePatientStore } from "../store/patientStore";
 import { PipelineProvider, usePipeline } from "../store/pipelineStore";
 import { isLoggedIn } from "../store/accessStore";
+import { PA_PROCEDURES, type ProcedureKey } from "../components/PriorAuthPortal/paData";
 import { WorkflowTracker } from "../components/WorkflowTracker";
 import { TabsEpic, TabPanel, useTabsEpic } from "../components/TabsEpic/TabsEpic";
 import { Header } from "../components/TabsEpic/Header";
@@ -893,7 +894,7 @@ function PublicLandingPage() {
             to="/access"
             className="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:bg-sky-600"
           >
-            Enroll Now — $1
+            Enroll Now — $20
           </Link>
           <Link
             to="/login"
@@ -902,6 +903,9 @@ function PublicLandingPage() {
             Student Login
           </Link>
         </div>
+        <p className="mt-4 text-center text-xs text-sky-600">
+          Note: $20 provides access to whole RCM
+        </p>
       </section>
 
       {/* Pipeline Features — 5 Stages */}
@@ -995,7 +999,7 @@ function PublicLandingPage() {
           <h2 className="text-2xl font-bold text-slate-700">Get Started in 4 Steps</h2>
           <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-4">
             {[
-              { n: "1", title: "Pay $1", desc: "via Bank Islami, EasyPaisa, or PayPal" },
+              { n: "1", title: "Pay $20", desc: "via Bank Islami, EasyPaisa, or PayPal" },
               { n: "2", title: "Submit Request", desc: "Fill form with your transaction ID" },
               { n: "3", title: "Get Approved", desc: "Admin activates your account" },
               { n: "4", title: "Practice!", desc: "Log in with your phone number and start the pipeline" },
@@ -1553,6 +1557,38 @@ function Home() {
                     <TabPanel id="orders" activeTab={activeTab}>
                       <div className="clinical-card">
                         <p className="clinical-label mb-3">Active Orders</p>
+
+                        {/* ── PA Required Alert ── */}
+                        {(() => {
+                          const paProcedures = Object.values(PA_PROCEDURES).map(p => p.label.toLowerCase());
+                          const matchingOrders = sharedOrders.filter(o =>
+                            paProcedures.some(p => o.toLowerCase().includes(p) || p.includes(o.toLowerCase()))
+                          );
+                          if (matchingOrders.length > 0) {
+                            return (
+                              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                                  <div>
+                                    <p className="text-[11px] font-semibold text-amber-800">⚠ Prior Authorization Required</p>
+                                    <p className="mt-0.5 text-[10px] text-amber-700">
+                                      {matchingOrders.map(o => `"${o}"`).join(", ")} requires prior authorization before the procedure can be performed. 
+                                      Please complete the Prior Auth form in the Prior Auth stage.
+                                    </p>
+                                    <button
+                                      onClick={() => setRole("prior-auth")}
+                                      className="mt-2 rounded bg-[#4A1D96] px-3 py-1 text-[10px] font-medium text-white hover:bg-[#3B1580] transition-colors"
+                                    >
+                                      Submit Prior Auth
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+
                         <p className="text-xs text-slate-400 mb-2">Manage orders for this encounter. Items appear in Summary.</p>
                         {currentRole === "scribe" ? (
                           <div className="space-y-2">

@@ -229,9 +229,19 @@ export function RightPaneleCW({ patient, displayName, editableVitals, editablePa
                       {daysUntilExpiry !== null && daysUntilExpiry <= 14 && daysUntilExpiry >= 0 && (
                         <p className="flex items-center gap-1 text-amber-700 font-medium">
                           <Clock className="h-2.5 w-2.5" />
-                          Expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? "s" : ""}
+                          PA Expiring Soon — {daysUntilExpiry} day{daysUntilExpiry !== 1 ? "s" : ""}
                         </p>
                       )}
+                      {record.nextRefillDate && (record.status === "completed" || record.status === "closed") && (() => {
+                        const refillDate = new Date(record.nextRefillDate);
+                        const daysUntilRefill = Math.ceil((refillDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        return daysUntilRefill <= 7 && daysUntilRefill >= 0 ? (
+                          <p className="flex items-center gap-1 text-orange-600 font-medium">
+                            <Clock className="h-2.5 w-2.5" />
+                            Refill Due — {daysUntilRefill} day{daysUntilRefill !== 1 ? "s" : ""}
+                          </p>
+                        ) : null;
+                      })()}
                       {record.verificationStatus === "verified" && (
                         <p className="flex items-center gap-1 text-green-600">
                           <CheckCircle2 className="h-2.5 w-2.5" /> Insurance verified
