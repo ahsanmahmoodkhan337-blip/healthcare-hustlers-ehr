@@ -899,7 +899,7 @@ function PublicLandingPage() {
             to="/access"
             className="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:bg-sky-600"
           >
-            Enroll Now — $20
+            Enroll Now — $20/5500 pkr
           </Link>
           <Link
             to="/login"
@@ -909,7 +909,7 @@ function PublicLandingPage() {
           </Link>
         </div>
         <p className="mt-4 text-center text-xs text-sky-600">
-          Note: $20 provides access to whole RCM
+          Note: $20/5500 pkr provides access to whole RCM
         </p>
       </section>
 
@@ -1004,7 +1004,7 @@ function PublicLandingPage() {
           <h2 className="text-2xl font-bold text-slate-700">Get Started in 4 Steps</h2>
           <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-4">
             {[
-              { n: "1", title: "Pay $20", desc: "via Bank Islami, EasyPaisa, or PayPal" },
+              { n: "1", title: "Pay $20/5500 pkr", desc: "via Bank Islami, EasyPaisa, or PayPal" },
               { n: "2", title: "Submit Request", desc: "Fill form with your transaction ID" },
               { n: "3", title: "Get Approved", desc: "Admin activates your account" },
               { n: "4", title: "Practice!", desc: "Log in with your phone number and start the pipeline" },
