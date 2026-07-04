@@ -13,6 +13,7 @@
  */
 
 import { Building2, PanelRightClose, LogOut } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { GlobalPatientSearch } from "./GlobalPatientSearch";
 import { getLoggedInPhone, logout } from "../../store/accessStore";
 import { RoleSwitcher } from "../RoleSwitcher";
@@ -35,10 +36,11 @@ export function Header({
   selectedPatientName,
 }: HeaderProps) {
   const loggedInPhone = getLoggedInPhone();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
-    window.location.href = "/login";
+    navigate({ to: "/login" });
   };
 
   return (
