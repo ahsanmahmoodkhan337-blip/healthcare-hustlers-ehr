@@ -190,7 +190,7 @@ export function CodingQueue() {
         selectedCPTs.map((c) => c.code)
       );
       setSubmitted(true);
-      setRole("biller");
+      setRole("prior-auth");
     }
   };
 

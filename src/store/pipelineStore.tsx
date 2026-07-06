@@ -153,23 +153,22 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  // Auto-advance: Coder → Biller
+  // Auto-advance: Coder → Prior Auth (PA comes before billing)
   const submitToBilling = (icdCodes: string[], cptCodes: string[]) => {
     setPipeline((prev) => ({
       ...prev,
       icdCodes,
       cptCodes,
-      stage: "biller",
+      stage: "prior-auth",
       status: "coded",
     }));
   };
 
-  // Auto-advance: Biller → Prior Auth (or Paid/Denied)
+  // Auto-advance: Biller submits claim
   const submitClaim = (claimData: Record<string, string>) => {
     setPipeline((prev) => ({
       ...prev,
       claimData,
-      stage: "prior-auth",
       status: "billed",
     }));
   };

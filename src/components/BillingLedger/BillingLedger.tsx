@@ -55,7 +55,6 @@ export function BillingLedger() {
   const handleSubmit = () => {
     submitClaim({ payer, posCode, submittedAt: new Date().toISOString() });
     setSubmitted(true);
-    setRole("prior-auth");
   };
 
   const simulateDenial = () => {
