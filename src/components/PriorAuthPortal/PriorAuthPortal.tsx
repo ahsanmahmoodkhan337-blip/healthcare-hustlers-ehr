@@ -76,7 +76,7 @@ interface DocAttachment {
 }
 
 export default function PriorAuthPortal() {
-  const { state, submitPA, addPARecord } = usePipeline();
+  const { state, submitPA, addPARecord, setRole } = usePipeline();
   const { getPatientById } = usePatientStore();
 
   // Get the first patient from the pipeline state or the first mock patient
@@ -239,6 +239,7 @@ export default function PriorAuthPortal() {
       authEndDate: paRecord.authEndDate,
     });
     setSubmitted(true);
+    setRole("biller");
   };
 
   // Filtered queue
