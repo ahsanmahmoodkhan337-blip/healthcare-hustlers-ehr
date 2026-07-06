@@ -965,7 +965,7 @@ function PublicLandingPage() {
 
         {/* Pipeline Flow Visual */}
         <div className="mb-8 flex items-center justify-center gap-1 overflow-x-auto rounded-xl bg-white p-4 shadow-sm">
-          {["📋 Scribe", "🔍 Coder", "💰 Biller", "📄 Prior Auth", "📞 AR Voice"].map((stage, i) => (
+          {["📋 Scribe", "🔍 Coder", "📄 Prior Auth", "💰 Biller", "📞 AR Voice"].map((stage, i) => (
             <div key={stage} className="flex items-center gap-1">
               <div className="whitespace-nowrap rounded-lg bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700">
                 {stage}
@@ -995,19 +995,19 @@ function PublicLandingPage() {
             },
             {
               stage: "STAGE 3",
-              title: "Biller — Claim Scrubbing",
-              desc: "Audit CMS-1500 claims for errors. Submit to clearinghouse and face real-world outcomes: get paid instantly or receive a denial code to resolve.",
-              icon: "💰",
-              color: "bg-violet-50 border-violet-200",
-              tag: "CMS-1500",
-            },
-            {
-              stage: "STAGE 4",
               title: "Prior Auth — Authorization Hub",
               desc: "Handle high-cost procedures requiring pre-approval. Map clinical documentation to insurance policy criteria and submit digital PA forms.",
               icon: "📄",
               color: "bg-purple-50 border-purple-200",
               tag: "PA Portal",
+            },
+            {
+              stage: "STAGE 4",
+              title: "Biller — Claim Scrubbing",
+              desc: "Audit CMS-1500 claims for errors. Submit to clearinghouse and face real-world outcomes: get paid instantly or receive a denial code to resolve.",
+              icon: "💰",
+              color: "bg-violet-50 border-violet-200",
+              tag: "CMS-1500",
             },
             {
               stage: "STAGE 5",
