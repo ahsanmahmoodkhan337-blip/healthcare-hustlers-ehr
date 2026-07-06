@@ -527,8 +527,35 @@ function SummaryTab({
 
 function MedicationsTab({ patientId }: { patientId: string }) {
   const { getPatientById } = usePatientStore();
+  const pipeline = usePipeline();
   const patient = getPatientById(patientId);
+  const isScribe = pipeline.currentRole === "scribe";
+
+  const [medications, setMedications] = useState(patient?.medications ?? []);
+  const [medName, setMedName] = useState("");
+  const [medDosage, setMedDosage] = useState("");
+  const [medFreq, setMedFreq] = useState("");
+
   if (!patient) return null;
+
+  const addMedication = () => {
+    if (!medName.trim()) return;
+    setMedications([...medications, {
+      id: `med-${Date.now()}`,
+      name: medName.trim(),
+      dosage: medDosage || "—",
+      frequency: medFreq || "—",
+      route: "Oral",
+      status: "active" as const,
+      prescribedDate: new Date().toISOString().split("T")[0],
+      prescribedBy: patient.primaryCareProvider,
+    }]);
+    setMedName(""); setMedDosage(""); setMedFreq("");
+  };
+
+  const removeMedication = (id: string) => {
+    setMedications(medications.filter(m => m.id !== id));
+  };
 
   return (
     <div className="clinical-card">
@@ -542,10 +569,11 @@ function MedicationsTab({ patientId }: { patientId: string }) {
             <th>Route</th>
             <th>Status</th>
             <th>Prescribed</th>
+            {isScribe && <th></th>}
           </tr>
         </thead>
         <tbody>
-          {patient.medications.map((med) => (
+          {medications.map((med) => (
             <tr key={med.id}>
               <td className="font-medium">{med.name}</td>
               <td>{med.dosage}</td>
@@ -565,10 +593,25 @@ function MedicationsTab({ patientId }: { patientId: string }) {
               <td className="text-xs text-slate-500">
                 {new Date(med.prescribedDate).toLocaleDateString()}
               </td>
+              {isScribe && (
+                <td>
+                  <button onClick={() => removeMedication(med.id)} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
+      {isScribe && (
+        <div className="mt-3 space-y-1.5 rounded border border-dashed border-slate-300 p-2">
+          <div className="grid grid-cols-3 gap-1">
+            <input type="text" value={medName} onChange={e => setMedName(e.target.value)} placeholder="Medication name" className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+            <input type="text" value={medDosage} onChange={e => setMedDosage(e.target.value)} placeholder="Dosage (e.g. 10mg)" className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+            <input type="text" value={medFreq} onChange={e => setMedFreq(e.target.value)} placeholder="Frequency (e.g. BID)" className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-blue-400" />
+          </div>
+          <button onClick={addMedication} className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700">+ Add Medication</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1580,11 +1623,31 @@ function Home() {
                         <p className="clinical-label mb-3">Problem List</p>
                         <div className="space-y-2">
                           {selectedPatient.problems.map((p, i) => (
-                            <div key={i} className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
-                              {p}
+                            <div key={i} className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 p-3 text-sm">
+                              <span>{p}</span>
+                              {currentRole === "scribe" && (
+                                <button onClick={() => {
+                                  // Remove problem from editablePatientData
+                                  const updated = editablePatientData.problems.filter((_, j) => j !== i);
+                                  setEditablePatientData({ ...editablePatientData, problems: updated });
+                                }} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                              )}
                             </div>
                           ))}
                         </div>
+                        {currentRole === "scribe" && (
+                          <div className="mt-2 flex gap-1">
+                            <input
+                              type="text"
+                              value={newProblem}
+                              onChange={e => setNewProblem(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter" && newProblem.trim()) { setEditablePatientData({ ...editablePatientData, problems: [...editablePatientData.problems, newProblem.trim()] }); setNewProblem(""); }}}
+                              placeholder="+ Add new problem..."
+                              className="flex-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-400"
+                            />
+                            <button onClick={() => { if (newProblem.trim()) { setEditablePatientData({ ...editablePatientData, problems: [...editablePatientData.problems, newProblem.trim()] }); setNewProblem(""); }}} className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600">Add</button>
+                          </div>
+                        )}
                       </div>
                     </TabPanel>
                     <TabPanel id="orders" activeTab={activeTab}>

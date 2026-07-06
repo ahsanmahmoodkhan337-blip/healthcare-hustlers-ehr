@@ -1,30 +1,29 @@
 /**
  * CodingQueue — Enhanced Medical Coder Workspace
  *
- * Full educational content for medical coding students:
- * - Searchable ICD-10-CM repository (30+ codes)
- * - Searchable CPT repository (25+ codes)
- * - Coding conventions panel (Excludes notes, guidelines)
- * - E/M level calculator based on MDM
- * - Modifier selector
- * - Coding validation quiz
- * - Split-screen layout: SOAP note on left, coding on right
+ * Major upgrade with:
+ * - ICD-10 priority ordering (1st, 2nd, 3rd diagnosis) with up/down reorder
+ * - Per-CPT data: modifiers, ICD linking, units, charges
+ * - ICD ↔ CPT linking dropdown per CPT row
+ * - Full charge capture per claim
  *
  * Inspiration: Epic Cogito / 3M 360 Encompass / AAPC CPC curriculum
  */
 
 import { useState, useMemo } from "react";
-import { Search, Code, BookOpen, ArrowRight, CheckCircle2, AlertCircle, FileText, Info } from "lucide-react";
+import { Search, Code, BookOpen, ArrowRight, CheckCircle2, AlertCircle, FileText, Info, ArrowUp, ArrowDown, Link2, DollarSign, Hash } from "lucide-react";
 import { usePipeline } from "../../store/pipelineStore";
 import { ICD10_CODES, searchICD10, type ICD10Code } from "./icd10Data";
 import { CPT_CODES, searchCPT, type CPTCode } from "./cptData";
 
 // ─── Types ────────────────────────────────────────────────────────
 
-interface SelectedCode {
-  code: string;
-  description: string;
-  type: "icd10" | "cpt";
+interface CPTCodeData {
+  cpt: CPTCode;
+  linkedICDs: string[]; // ICD-10 code strings
+  modifiers: string[];
+  units: number;
+  charges: number;
 }
 
 const MODIFIERS = [
@@ -63,9 +62,22 @@ export function CodingQueue() {
   // Code search state
   const [icdQuery, setIcdQuery] = useState("");
   const [cptQuery, setCptQuery] = useState("");
-  const [selectedICDs, setSelectedICDs] = useState<ICD10Code[]>(state.icdCodes.length > 0 ? ICD10_CODES.filter(c => state.icdCodes.includes(c.code)) : []);
-  const [selectedCPTs, setSelectedCPTs] = useState<CPTCode[]>(state.cptCodes.length > 0 ? CPT_CODES.filter(c => state.cptCodes.includes(c.code)) : []);
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+
+  // Ordered ICD-10 list with priority (position = priority)
+  const [selectedICDs, setSelectedICDs] = useState<ICD10Code[]>(
+    state.icdCodes.length > 0
+      ? ICD10_CODES.filter(c => state.icdCodes.includes(c.code))
+      : []
+  );
+
+  // Per-CPT data: each CPT gets its own modifiers, linked ICDs, units, charges
+  const [cptDataMap, setCptDataMap] = useState<Record<string, CPTCodeData>>({});
+  // Base CPT list (the codes themselves)
+  const [selectedCPTs, setSelectedCPTs] = useState<CPTCode[]>(
+    state.cptCodes.length > 0
+      ? CPT_CODES.filter(c => state.cptCodes.includes(c.code))
+      : []
+  );
 
   // E/M calculator
   const [emProblems, setEmProblems] = useState<number>(1);
@@ -86,6 +98,38 @@ export function CodingQueue() {
   const icdResults = useMemo(() => searchICD10(icdQuery), [icdQuery]);
   const cptResults = useMemo(() => searchCPT(cptQuery), [cptQuery]);
 
+  // Get or create CPT data for a cpt code
+  const getCptData = (code: string): CPTCodeData => {
+    if (!cptDataMap[code]) {
+      const cpt = selectedCPTs.find(c => c.code === code);
+      cptDataMap[code] = {
+        cpt: cpt!,
+        linkedICDs: [],
+        modifiers: [],
+        units: 1,
+        charges: 0,
+      };
+    }
+    return cptDataMap[code];
+  };
+
+  const updateCptData = (code: string, updater: (d: CPTCodeData) => CPTCodeData) => {
+    setCptDataMap(prev => ({
+      ...prev,
+      [code]: updater(prev[code] || getCptData(code)),
+    }));
+  };
+
+  // ICD reorder
+  const moveICD = (idx: number, direction: "up" | "down") => {
+    if (direction === "up" && idx === 0) return;
+    if (direction === "down" && idx === selectedICDs.length - 1) return;
+    const newList = [...selectedICDs];
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    [newList[idx], newList[targetIdx]] = [newList[targetIdx], newList[idx]];
+    setSelectedICDs(newList);
+  };
+
   const addICD = (code: ICD10Code) => {
     if (!selectedICDs.find((c) => c.code === code.code)) {
       setSelectedICDs([...selectedICDs, code]);
@@ -95,23 +139,41 @@ export function CodingQueue() {
 
   const removeICD = (code: string) => {
     setSelectedICDs(selectedICDs.filter((c) => c.code !== code));
+    // Also remove this ICD from all CPT links
+    setCptDataMap(prev => {
+      const next: Record<string, CPTCodeData> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        next[k] = { ...v, linkedICDs: v.linkedICDs.filter(c => c !== code) };
+      }
+      return next;
+    });
   };
 
   const addCPT = (code: CPTCode) => {
     if (!selectedCPTs.find((c) => c.code === code.code)) {
       setSelectedCPTs([...selectedCPTs, code]);
       setCptQuery("");
+      // Initialize CPT data
+      setCptDataMap(prev => ({
+        ...prev,
+        [code.code]: {
+          cpt: code,
+          linkedICDs: [],
+          modifiers: [],
+          units: 1,
+          charges: 0,
+        },
+      }));
     }
   };
 
   const removeCPT = (code: string) => {
     setSelectedCPTs(selectedCPTs.filter((c) => c.code !== code));
-  };
-
-  const toggleModifier = (mod: string) => {
-    setSelectedModifiers((prev) =>
-      prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod]
-    );
+    setCptDataMap(prev => {
+      const next = { ...prev };
+      delete next[code];
+      return next;
+    });
   };
 
   const calcEMMLevel = () => {
@@ -132,15 +194,24 @@ export function CodingQueue() {
   };
 
   const handleQuizSubmit = () => {
-    // Simple quiz: "Does E11.9 (DM) support 99214 (office visit)?"
     if (quizAnswer === "yes") {
-      setQuizFeedback("✅ Correct! E11.9 supports a moderate MDM visit like 99214.");
+      setQuizFeedback("✓ Correct! E11.9 supports a moderate MDM visit like 99214.");
     } else {
-      setQuizFeedback("❌ Actually yes — a diabetic patient with medication management can support 99214.");
+      setQuizFeedback("Actually yes — a diabetic patient with medication management can support 99214.");
     }
   };
 
   const emLevel = calcEMMLevel();
+
+  // Compute total charge
+  const totalCharges = useMemo(() => {
+    let total = 0;
+    selectedCPTs.forEach(cpt => {
+      const data = cptDataMap[cpt.code];
+      if (data) total += data.charges * data.units;
+    });
+    return total;
+  }, [selectedCPTs, cptDataMap]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -201,12 +272,15 @@ export function CodingQueue() {
               ))}
             </div>
 
-            {/* ICD-10 Code Search */}
+            {/* ICD-10 + CPT Workspace */}
             {!showConventions && (
               <>
-                {/* ICD-10 Section */}
+                {/* ─── ICD-10 Section with Priority ─── */}
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-indigo-700 mb-2">ICD-10-CM Diagnosis Codes</p>
+                  <p className="text-xs font-semibold text-indigo-700 mb-2 flex items-center gap-1">
+                    ICD-10-CM Diagnosis Codes
+                    <span className="text-[9px] font-normal text-indigo-400 ml-1">(drag or use arrows to set priority — 1st, 2nd, 3rd)</span>
+                  </p>
                   <div className="relative mb-2">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                     <input
@@ -234,19 +308,37 @@ export function CodingQueue() {
                       ))}
                     </div>
                   )}
-                  {/* Selected ICD-10 codes */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedICDs.map((c) => (
-                      <span key={c.code} className="inline-flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
-                        {c.code}
-                        <button onClick={() => removeICD(c.code)} className="text-indigo-400 hover:text-indigo-600">&times;</button>
-                      </span>
+
+                  {/* Selected ICD-10 codes with priority indicators + reorder arrows */}
+                  <div className="space-y-1.5">
+                    {selectedICDs.map((c, idx) => (
+                      <div key={c.code} className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/50 px-2 py-1.5 text-[10px]">
+                        <div className="flex flex-col gap-0.5">
+                          <button onClick={() => moveICD(idx, "up")} disabled={idx === 0} className={`h-3 w-3 ${idx === 0 ? "text-slate-300" : "text-indigo-500 hover:text-indigo-700"}`}>
+                            <ArrowUp className="h-3 w-3" />
+                          </button>
+                          <button onClick={() => moveICD(idx, "down")} disabled={idx === selectedICDs.length - 1} className={`h-3 w-3 ${idx === selectedICDs.length - 1 ? "text-slate-300" : "text-indigo-500 hover:text-indigo-700"}`}>
+                            <ArrowDown className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold text-white ${
+                          idx === 0 ? "bg-red-400" : idx === 1 ? "bg-amber-400" : "bg-indigo-400"
+                        }`}>
+                          {idx === 0 ? "1st" : idx === 1 ? "2nd" : `${idx + 1}th`}
+                        </span>
+                        <span className="font-mono font-semibold text-indigo-700 shrink-0">{c.code}</span>
+                        <span className="flex-1 text-slate-600 truncate">{c.description}</span>
+                        <button onClick={() => removeICD(c.code)} className="text-red-400 hover:text-red-600 shrink-0">&times;</button>
+                      </div>
                     ))}
+                    {selectedICDs.length === 0 && (
+                      <p className="text-[10px] text-slate-400 italic">No ICD-10 codes selected. Search and add above.</p>
+                    )}
                   </div>
                 </div>
 
-                {/* CPT Section */}
-                <div className="mt-4">
+                {/* ─── CPT Section with Per-Code Data ─── */}
+                <div className="mt-5">
                   <p className="text-xs font-semibold text-violet-700 mb-2">CPT Procedure Codes</p>
                   <div className="relative mb-2">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -275,40 +367,142 @@ export function CodingQueue() {
                       ))}
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedCPTs.map((c) => (
-                      <span key={c.code} className="inline-flex items-center gap-1 rounded bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
-                        {c.code}
-                        <button onClick={() => removeCPT(c.code)} className="text-violet-400 hover:text-violet-600">&times;</button>
-                      </span>
-                    ))}
-                  </div>
+
+                  {/* Per-CPT detail rows */}
+                  {selectedCPTs.length > 0 && (
+                    <div className="space-y-2">
+                      {selectedCPTs.map((cpt) => {
+                        const data = cptDataMap[cpt.code] || getCptData(cpt.code);
+                        return (
+                          <div key={cpt.code} className="rounded-lg border border-violet-100 bg-white p-2.5 shadow-sm">
+                            {/* CPT header row */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-mono font-semibold text-violet-700 text-xs">{cpt.code}</span>
+                              <span className="flex-1 text-[10px] text-slate-600 truncate">{cpt.description}</span>
+                              <button onClick={() => removeCPT(cpt.code)} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                            </div>
+
+                            {/* ICD-10 linking dropdown */}
+                            <div className="mb-1.5">
+                              <div className="flex items-center gap-1 mb-1">
+                                <Link2 className="h-2.5 w-2.5 text-violet-500" />
+                                <span className="text-[9px] font-medium text-slate-500">Link to ICD-10 Codes</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {selectedICDs.map(icd => {
+                                  const isLinked = data.linkedICDs.includes(icd.code);
+                                  return (
+                                    <button
+                                      key={icd.code}
+                                      onClick={() => updateCptData(cpt.code, d => ({
+                                        ...d,
+                                        linkedICDs: isLinked
+                                          ? d.linkedICDs.filter(c => c !== icd.code)
+                                          : [...d.linkedICDs, icd.code],
+                                      }))}
+                                      className={`rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${
+                                        isLinked
+                                          ? "bg-indigo-100 text-indigo-700 border border-indigo-200"
+                                          : "bg-slate-50 text-slate-500 border border-slate-200 hover:border-violet-200"
+                                      }`}
+                                    >
+                                      {icd.code} {isLinked ? "✓" : ""}
+                                    </button>
+                                  );
+                                })}
+                                {selectedICDs.length === 0 && (
+                                  <span className="text-[9px] text-slate-400 italic">Add ICD-10 codes first</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Inline modifiers */}
+                            <div className="mb-1.5">
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-[9px] font-medium text-slate-500">Modifiers</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {MODIFIERS.map(m => {
+                                  const isActive = data.modifiers.includes(m.code);
+                                  return (
+                                    <button
+                                      key={m.code}
+                                      onClick={() => updateCptData(cpt.code, d => ({
+                                        ...d,
+                                        modifiers: isActive
+                                          ? d.modifiers.filter(c => c !== m.code)
+                                          : [...d.modifiers, m.code],
+                                      }))}
+                                      title={m.description}
+                                      className={`rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${
+                                        isActive
+                                          ? "bg-sky-100 text-sky-700 border border-sky-200"
+                                          : "bg-white text-slate-400 border border-slate-200 hover:border-sky-200"
+                                      }`}
+                                    >
+                                      -{m.code}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Units & Charges */}
+                            <div className="flex items-center gap-3 mt-2">
+                              <div className="flex items-center gap-1">
+                                <Hash className="h-2.5 w-2.5 text-slate-400" />
+                                <label className="text-[9px] text-slate-500">Units:</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="99"
+                                  value={data.units}
+                                  onChange={e => updateCptData(cpt.code, d => ({ ...d, units: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                  className="w-12 rounded border border-slate-200 px-1.5 py-0.5 text-[9px] outline-none focus:border-violet-400"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-2.5 w-2.5 text-slate-400" />
+                                <label className="text-[9px] text-slate-500">Charge:</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={data.charges || ""}
+                                  onChange={e => updateCptData(cpt.code, d => ({ ...d, charges: parseFloat(e.target.value) || 0 }))}
+                                  placeholder="0.00"
+                                  className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-[9px] outline-none focus:border-violet-400"
+                                />
+                              </div>
+                              {data.charges > 0 && (
+                                <span className="text-[9px] text-violet-600 font-medium">
+                                  = ${(data.charges * data.units).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {selectedCPTs.length === 0 && (
+                    <p className="text-[10px] text-slate-400 italic">No CPT codes selected. Search and add above.</p>
+                  )}
                 </div>
 
-                {/* Modifier Selector */}
-                <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-600 mb-2">Modifiers</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {MODIFIERS.map((m) => (
-                      <button
-                        key={m.code}
-                        onClick={() => toggleModifier(m.code)}
-                        className={`rounded-lg border px-2 py-1 text-[10px] font-medium transition-colors ${
-                          selectedModifiers.includes(m.code)
-                            ? "bg-sky-100 border-sky-300 text-sky-700"
-                            : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                        }`}
-                        title={m.description}
-                      >
-                        -{m.code}
-                      </button>
-                    ))}
+                {/* Total Charges Summary */}
+                {selectedCPTs.length > 0 && totalCharges > 0 && (
+                  <div className="mt-3 rounded-lg bg-violet-50 border border-violet-200 p-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-violet-700">Total Charges</span>
+                      <span className="text-sm font-bold text-violet-800">${totalCharges.toFixed(2)}</span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Coding Quiz */}
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-[10px] font-semibold text-amber-700 mb-2">🧠 Coding Quiz: Does the diagnosis support the procedure?</p>
+                  <p className="text-[10px] font-semibold text-amber-700 mb-2"> Coding Quiz: Does the diagnosis support the procedure?</p>
                   <p className="text-[10px] text-amber-600 mb-2">E11.9 (Diabetes) + 99214 (Established visit) — Are these codes compatible?</p>
                   <div className="flex gap-2">
                     {["yes", "no"].map((ans) => (
@@ -348,7 +542,7 @@ export function CodingQueue() {
                   </div>
                 ))}
                 <div className="mt-3 rounded-lg bg-sky-50 border border-sky-200 p-3">
-                  <p className="text-[10px] font-semibold text-sky-700 mb-1">📌 Coding Tip</p>
+                  <p className="text-[10px] font-semibold text-sky-700 mb-1"> Coding Tip</p>
                   <p className="text-[10px] text-sky-600">Always code the definitive diagnosis over symptoms. When a definitive diagnosis is established, do not code the symptom that led to it — unless the symptom is a separate condition.</p>
                 </div>
               </div>
@@ -373,6 +567,12 @@ export function CodingQueue() {
                     <p className="text-[10px] font-medium text-indigo-700">CPT Codes ({selectedCPTs.length})</p>
                     <p className="text-xs text-indigo-600">{selectedCPTs.map(c => c.code).join(", ")}</p>
                   </div>
+                  {totalCharges > 0 && (
+                    <div className="rounded-lg bg-violet-50 border border-violet-200 p-2">
+                      <p className="text-[10px] font-medium text-violet-700">Total Charges</p>
+                      <p className="text-xs text-violet-600">${totalCharges.toFixed(2)}</p>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => setRole("biller")}
@@ -383,7 +583,6 @@ export function CodingQueue() {
                 </button>
               </div>
             ) : (<>
-              {/* Existing submit button */}
               {selectedICDs.length > 0 && selectedCPTs.length > 0 && (
                 <button
                   onClick={handleSubmitToBilling}
