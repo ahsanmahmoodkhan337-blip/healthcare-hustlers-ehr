@@ -117,7 +117,7 @@ const ROLE_LABELS: Record<Role, string> = {
   "ar-voice": "AR Voice Specialist",
 };
 
-const STAGE_ORDER: Role[] = ["scribe", "coder", "biller", "prior-auth"];
+const STAGE_ORDER: Role[] = ["scribe", "coder", "prior-auth", "biller"];
 
 // ─── Provider ──────────────────────────────────────────────────────
 

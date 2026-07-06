@@ -41,6 +41,15 @@ export interface CaseState {
   paStatus: "NOT_REQUIRED" | "REQUIRED_MISSING" | "PENDING_REVIEW" | "APPROVED";
   arStatus: "NONE" | "DENIED_QUEUE" | "APPEAL_PENDING" | "RESOLVED";
   routingNotes: RoutingNote[];
+  // PA follow-up tracking
+  followups: FollowUpEntry[];
+}
+
+export interface FollowUpEntry {
+  date: string;
+  trackingNumber: string;
+  repName: string;
+  notes: string;
 }
 
 export interface RoutingNote {
@@ -795,6 +804,7 @@ interface PatientContextValue {
   setPaStatus: (patientId: string, status: CaseState["paStatus"]) => void;
   setArStatus: (patientId: string, status: CaseState["arStatus"]) => void;
   addRoutingNote: (patientId: string, note: RoutingNote) => void;
+  addFollowUp: (patientId: string, entry: FollowUpEntry) => void;
 }
 
 const DEFAULT_CASE = (patientId: string): CaseState => ({
@@ -806,6 +816,7 @@ const DEFAULT_CASE = (patientId: string): CaseState => ({
   paStatus: "NOT_REQUIRED",
   arStatus: "NONE",
   routingNotes: [],
+  followups: [],
 });
 
 const PatientContext = createContext<PatientContextValue | null>(null);
@@ -844,10 +855,13 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const addRoutingNote = (patientId: string, note: RoutingNote) => {
     updateCase(patientId, cs => ({ ...cs, routingNotes: [...cs.routingNotes, note] }));
   };
+  const addFollowUp = (patientId: string, entry: FollowUpEntry) => {
+    updateCase(patientId, cs => ({ ...cs, followups: [...cs.followups, entry] }));
+  };
 
   return (
     <PatientContext.Provider
-      value={{ patients: mockPatients, getPatientById, getPatientByMrn, caseStates, addAuditLog, setQueueStage, setModifier25, setBillingStatus, setPaStatus, setArStatus, addRoutingNote }}
+      value={{ patients: mockPatients, getPatientById, getPatientByMrn, caseStates, addAuditLog, setQueueStage, setModifier25, setBillingStatus, setPaStatus, setArStatus, addRoutingNote, addFollowUp }}
     >
       {children}
     </PatientContext.Provider>
