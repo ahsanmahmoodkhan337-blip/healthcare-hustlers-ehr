@@ -55,6 +55,7 @@ import { WorklistPanel } from "../components/WorklistPanel";
 import { FinancialLedger } from "../components/FinancialLedger";
 import { ToastProvider, useToast } from "../components/Toast";
 import { Skeleton } from "../components/Skeleton";
+import { Certificate } from "../components/Certificate";
 
 // ─── Route ──────────────────────────────────────────────────────────
 
@@ -1574,6 +1575,14 @@ function Home() {
                           >
                             Switch to Coder Role
                           </button>
+                        </div>
+                        {/* Certificate Generator */}
+                        <div className="mt-6">
+                          <Certificate
+                            studentName={selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName}` : undefined}
+                            completedModules={["Scribe", "Coder", "Biller", "Prior Auth", "AR Voice"]}
+                            score={92}
+                          />
                         </div>
                       </div>
                     )}

@@ -18,6 +18,7 @@ import { GlobalPatientSearch } from "./GlobalPatientSearch";
 import { getLoggedInPhone, logout } from "../../store/accessStore";
 import { RoleSwitcher } from "../RoleSwitcher";
 import { DarkModeToggle } from "../DarkModeToggle";
+import { LeaderboardPanel } from "../LeaderboardPanel";
 
 interface HeaderProps {
   businessName: string;
@@ -115,6 +116,9 @@ export function Header({
             <p className="text-[10px] text-slate-500">Teaching Clinic</p>
           </div>
         </div>
+
+        {/* Leaderboard */}
+        <LeaderboardPanel />
 
         {/* Dark Mode Toggle */}
         <DarkModeToggle />
