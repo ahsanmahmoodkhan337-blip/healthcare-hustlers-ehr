@@ -21,6 +21,7 @@ import { Activity, ArrowRight, CheckCircle2 } from "lucide-react";
 import { PatientProvider, usePatientStore } from "../store/patientStore";
 import { PipelineProvider, usePipeline } from "../store/pipelineStore";
 import { isLoggedIn } from "../store/accessStore";
+import { checkSessionExpired, clearSession, setSessionStart } from "../store/accessStore";
 import { PA_PROCEDURES, type ProcedureKey } from "../components/PriorAuthPortal/paData";
 import { WorkflowTracker } from "../components/WorkflowTracker";
 import { TabsEpic, TabPanel, useTabsEpic } from "../components/TabsEpic/TabsEpic";
@@ -52,16 +53,20 @@ import PriorAuthPortal from "../components/PriorAuthPortal/PriorAuthPortal";
 import { GamificationHeader } from "../components/GamificationHeader";
 import { WorklistPanel } from "../components/WorklistPanel";
 import { FinancialLedger } from "../components/FinancialLedger";
+import { ToastProvider, useToast } from "../components/Toast";
+import { Skeleton } from "../components/Skeleton";
 
 // ─── Route ──────────────────────────────────────────────────────────
 
 export const Route = createFileRoute("/")({
   component: () => (
-    <PatientProvider>
-      <PipelineProvider>
-        <Home />
-      </PipelineProvider>
-    </PatientProvider>
+    <ToastProvider>
+      <PatientProvider>
+        <PipelineProvider>
+          <Home />
+        </PipelineProvider>
+      </PatientProvider>
+    </ToastProvider>
   ),
 });
 
@@ -1083,6 +1088,7 @@ function Home() {
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const { currentRole, submitToCoding, setRole, paRecords } = usePipeline();
+  const { addToast } = useToast();
   const [activeStage, setActiveStage] = useState("registration");
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set(["registration"]));
   const [xp, setXp] = useState(0);
@@ -1235,6 +1241,21 @@ function Home() {
   // Check login on mount
   useEffect(() => {
     setCheckingAuth(false);
+    // Record session start time for timeout tracking
+    setSessionStart();
+  }, []);
+
+  // Poll session expiry every 10 seconds
+  useEffect(() => {
+    if (isLoggedIn()) {
+      const interval = setInterval(() => {
+        if (checkSessionExpired()) {
+          clearSession();
+          window.location.reload();
+        }
+      }, 10000);
+      return () => clearInterval(interval);
+    }
   }, []);
 
   // Show public landing page while checking or if not logged in
@@ -1271,6 +1292,7 @@ function Home() {
       submitToCoding(fullNote);
       setIsSubmittingNote(false);
       setSubmittedToCoding(true);
+      addToast({ type: "success", title: "Note Submitted to Coding!", description: "The clinical note has been signed, locked, and sent to the coding queue." });
       // Mark sign-lock as completed
       const updated = new Set(completedStages);
       updated.add("sign-lock");
@@ -1486,7 +1508,7 @@ function Home() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4">
+                  <div className="flex-1 overflow-y-auto p-4 animate-slide-in" key={activeStage}>
                     {activeStage === "registration" && (
                       <RegistrationStage />
                     )}

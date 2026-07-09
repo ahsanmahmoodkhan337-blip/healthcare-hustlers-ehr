@@ -30,6 +30,8 @@ import {
   getAccessRequests,
   updateRequestStatus,
   getApprovedPhones,
+  getSessionTimeoutMinutes,
+  setSessionTimeoutMinutes,
   type AccessRequest,
 } from "../store/accessStore";
 import {
@@ -58,6 +60,8 @@ function AdminPage() {
   const [editPinValue, setEditPinValue] = useState("");
   const [showPins, setShowPins] = useState(false);
   const [pinSaved, setPinSaved] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState(getSessionTimeoutMinutes());
+  const [timeoutSaved, setTimeoutSaved] = useState(false);
 
   // Load data from localStorage
   useEffect(() => {
@@ -360,6 +364,63 @@ function AdminPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* ─── Session Timeout ─── */}
+        <div className="mt-6 rounded-xl border border-slate-700 bg-slate-800">
+          <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-sky-400" />
+              <h2 className="text-sm font-semibold text-white">Session Timeout</h2>
+            </div>
+            {timeoutSaved && (
+              <span className="text-[10px] text-green-400">Saved!</span>
+            )}
+          </div>
+          <div className="p-4">
+            <p className="text-xs text-slate-400 mb-3">
+              Automatically revoke student credentials after a set period of inactivity.
+              Set to 0 to disable auto-logout.
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">Timeout Duration</label>
+                <select
+                  value={sessionTimeout}
+                  onChange={(e) => setSessionTimeout(parseInt(e.target.value))}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+                >
+                  <option value="0">No timeout (disabled)</option>
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="60">1 hour</option>
+                  <option value="120">2 hours</option>
+                  <option value="240">4 hours</option>
+                  <option value="480">8 hours</option>
+                  <option value="1440">24 hours</option>
+                </select>
+              </div>
+              <button
+                onClick={() => {
+                  setSessionTimeoutMinutes(sessionTimeout);
+                  setRefreshKey((k) => k + 1);
+                }}
+                className="mt-5 flex items-center gap-1 rounded-lg bg-sky-600 px-4 py-2 text-xs font-medium text-white hover:bg-sky-500"
+              >
+                <Save className="h-3.5 w-3.5" />
+                Apply
+              </button>
+            </div>
+            {sessionTimeout > 0 && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-sky-900/30 px-3 py-2">
+                <Clock className="h-3.5 w-3.5 text-sky-400" />
+                <p className="text-[10px] text-sky-300">
+                  Students will be automatically logged out after <strong>{sessionTimeout} minutes</strong> of inactivity.
+                  Their session resets each time they log in.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
