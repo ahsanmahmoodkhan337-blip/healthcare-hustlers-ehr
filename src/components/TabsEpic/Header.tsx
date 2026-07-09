@@ -12,7 +12,8 @@
  * - Right:  Patient search + toggle + profile + logout
  */
 
-import { Building2, PanelRightClose, LogOut } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Building2, PanelRightClose, LogOut, Timer } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { GlobalPatientSearch } from "./GlobalPatientSearch";
 import { getLoggedInPhone, logout } from "../../store/accessStore";
@@ -27,6 +28,9 @@ interface HeaderProps {
   showRightPanel: boolean;
   onToggleRightPanel: () => void;
   selectedPatientName?: string;
+  examMode?: boolean;
+  examTimeRemaining?: number;
+  onToggleExamMode?: () => void;
 }
 
 export function Header({
@@ -36,6 +40,9 @@ export function Header({
   showRightPanel,
   onToggleRightPanel,
   selectedPatientName,
+  examMode,
+  examTimeRemaining,
+  onToggleExamMode,
 }: HeaderProps) {
   const loggedInPhone = getLoggedInPhone();
   const navigate = useNavigate();
@@ -44,6 +51,16 @@ export function Header({
     logout();
     navigate({ to: "/login" });
   };
+
+  // Format time remaining
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // Exam mode warning colors
+  const examUrgent = examTimeRemaining !== undefined && examTimeRemaining < 120;
 
   return (
     <header className="header-nav sticky top-0 z-30 flex items-center justify-between gap-4 px-4 py-2 shadow-lg">
@@ -119,6 +136,26 @@ export function Header({
 
         {/* Leaderboard */}
         <LeaderboardPanel />
+
+        {/* Exam Mode Toggle */}
+        <button
+          onClick={onToggleExamMode}
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors ${
+            examMode
+              ? examUrgent
+                ? "bg-red-600 text-white animate-pulse"
+                : "bg-amber-600 text-white"
+              : "bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white"
+          }`}
+          title={examMode ? "Exit exam mode" : "Start exam mode (30 min)"}
+        >
+          <Timer className="h-3.5 w-3.5" />
+          {examMode && examTimeRemaining !== undefined ? (
+            <span className="font-mono font-bold">{formatTime(examTimeRemaining)}</span>
+          ) : (
+            <span className="hidden sm:inline">Exam</span>
+          )}
+        </button>
 
         {/* Dark Mode Toggle */}
         <DarkModeToggle />

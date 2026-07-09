@@ -1095,6 +1095,9 @@ function Home() {
   const [xp, setXp] = useState(0);
   const [streak, setStreak] = useState(0);
   const [level, setLevel] = useState(1);
+  const [examMode, setExamMode] = useState(false);
+  const [examTimeRemaining, setExamTimeRemaining] = useState(1800); // 30 min in seconds
+  const examTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // SOAP note state lifted from AssessmentPlanStage for pipeline submission
   const [soapNote, setSoapNote] = useState<SoapNoteData>({
@@ -1246,6 +1249,38 @@ function Home() {
     setSessionStart();
   }, []);
 
+  // Exam mode timer
+  useEffect(() => {
+    if (examMode) {
+      examTimerRef.current = setInterval(() => {
+        setExamTimeRemaining(prev => {
+          if (prev <= 1) {
+            if (examTimerRef.current) clearInterval(examTimerRef.current);
+            addToast({ type: "warning", title: "Exam Time Expired!", description: "Your 30-minute exam has ended. Your score will be calculated." });
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (examTimerRef.current) {
+        clearInterval(examTimerRef.current);
+        examTimerRef.current = null;
+      }
+      setExamTimeRemaining(1800);
+    }
+    return () => {
+      if (examTimerRef.current) clearInterval(examTimerRef.current);
+    };
+  }, [examMode]);
+
+  const toggleExamMode = () => {
+    setExamMode(prev => !prev);
+    if (!examMode) {
+      addToast({ type: "info", title: "Exam Mode Started", description: "You have 30 minutes to complete the pipeline. Timer starts now!" });
+    }
+  };
+
   // Poll session expiry every 10 seconds
   useEffect(() => {
     if (isLoggedIn()) {
@@ -1335,6 +1370,9 @@ function Home() {
                 ? `${selectedPatient.lastName}, ${selectedPatient.firstName}`
                 : undefined
             }
+            examMode={examMode}
+            examTimeRemaining={examTimeRemaining}
+            onToggleExamMode={toggleExamMode}
           />
         </>
       }
